@@ -104,8 +104,11 @@ foreach ($s in $allDispatchers) {
     # does not register as a merge command.
     $tokens = $null
     [void][System.Management.Automation.Language.Parser]::ParseFile($s, [ref]$tokens, [ref]$null)
+    # Exclude every string-shaped token kind, not a hardcoded three. Prose
+    # inside a here-string ("do not merge") is documentation, not a command,
+    # and an incomplete exclusion list made this test fail on its own guidance.
     $code = ($tokens | Where-Object {
-        $_.Kind -ne 'Comment' -and $_.Kind -ne 'StringLiteral' -and $_.Kind -ne 'StringExpandable'
+        $_.Kind -ne 'Comment' -and $_.Kind -notlike 'String*' -and $_.Kind -notlike 'HereString*'
     } | ForEach-Object { $_.Text }) -join ' '
 
     Test-Case "$name contains no git merge invocation" {
