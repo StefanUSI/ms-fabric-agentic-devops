@@ -14,7 +14,19 @@
     "owner": "StefanUSI",
     "name": "ms-fabric-agentic-devops",
     "fullName": "StefanUSI/ms-fabric-agentic-devops",
-    "requirePrivate": true,
+
+    "$visibilityComment": [
+      "requirePrivate is false because this control-plane repository is",
+      "deliberately PUBLIC. Confidentiality does not come from repository",
+      "visibility here - it comes from the identifier split (real values live",
+      "only in the gitignored config/environment.local.json) and from the",
+      "mechanical pre-commit gate in scripts/Test-PublicRepoPrivacy.ps1.",
+      "",
+      "Relying on 'the repo is private' would have been the weaker control: it",
+      "protects nothing the moment visibility changes, and it silently permits",
+      "identifiers into history in the meantime."
+    ],
+    "requirePrivate": false,
     "protectedBranches": ["main"],
     "baseBranch": "main"
   },
