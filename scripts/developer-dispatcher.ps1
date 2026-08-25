@@ -42,7 +42,16 @@ param(
 
     [int]$IssueNumber = 0,
     [int]$PollIntervalSeconds = 0,
-    [switch]$SkipBaselineChecks
+    [switch]$SkipBaselineChecks,
+
+    # Launch the developer agent as a separate process. Off by default: starting
+    # an autonomous agent that writes to Fabric is a deliberate act, not a
+    # side effect of running the dispatcher.
+    [switch]$LaunchAgent,
+
+    # Ceiling on developer/reviewer cycles for this ticket. Two headless agents
+    # can loop; each iteration costs budget and touches a shared capacity.
+    [int]$MaxIterations = 3
 )
 
 Set-StrictMode -Version Latest
@@ -273,6 +282,25 @@ if ($script:LastGitExitCode -ne 0 -or -not (Test-Path -LiteralPath $worktree)) {
 }
 Write-Ok "Created branch '$branch' and worktree '$worktree'."
 
+Write-Phase 'LIVE: propagating local environment configuration'
+# A worktree is a checkout of TRACKED files only. config/environment.local.json
+# is gitignored, so it does not exist there and the agent would have no way to
+# resolve the authorised target. Copy it in; the same ignore rules apply inside
+# the worktree, so it still cannot be committed.
+$localCfgSrc = 'config/environment.local.json'
+$localCfgDst = Join-Path $worktree 'config/environment.local.json'
+if (Test-Path -LiteralPath $localCfgSrc) {
+    $dstDir = Split-Path -Parent $localCfgDst
+    if (-not (Test-Path -LiteralPath $dstDir)) { New-Item -ItemType Directory -Force -Path $dstDir | Out-Null }
+    Copy-Item -LiteralPath $localCfgSrc -Destination $localCfgDst -Force
+    Write-Ok 'Local environment config copied into the worktree (gitignored there too).'
+} else {
+    Write-Err "Local environment config not found: $localCfgSrc"
+    Write-Err 'Copy config/environment.json to config/environment.local.json and fill it in.'
+    Write-Err 'Refusing to dispatch an agent that cannot resolve its authorised target.'
+    exit $script:D_EXIT_USAGE
+}
+
 Write-Phase 'LIVE: writing execution manifest'
 $m = New-Manifest -Fields @{
     role            = 'developer'
@@ -292,9 +320,73 @@ Write-ManifestFile -Manifest $m -Path $manifest
 Write-Ok "Manifest written: $manifest"
 
 Write-Host ""
-Write-Warn2 'The developer agent has NOT been invoked. Start it deliberately:'
-Write-Host "    $claudeCommand"
+
+# --- Launch the developer agent ------------------------------------------------
+# The agent runs as a SEPARATE process with its own fresh context. The
+# dispatcher does not implement the ticket and does not inherit the agent's
+# reasoning; it only starts it and reports the outcome.
+if ($LaunchAgent) {
+    Write-Phase 'LIVE: launching developer agent as a separate process'
+    Write-Warn2 "Iteration ceiling: $MaxIterations. The agent runs headless with the operator's Fabric permissions."
+    Write-Info  'Controls in force: item allowlist, data-path allowlist, issue prefix, target folder, one job at a time.'
+    Write-Info  'None of these is permission-enforced. They are instructions the agent is expected to follow.'
+
+    $agentPrompt = @"
+You are the Developer Agent. Implement GitHub Issue #$($selected.number) in this worktree.
+
+Read these before making any change:
+  - CLAUDE.md (standing safety rules - binding)
+  - AGENTS.md (your role and hard limits)
+  - docs/environment-and-constraints.md
+  - docs/review-evidence-standard.md
+  - docs/agent-toolbox.md
+  - .agent-manifest.json (your execution manifest)
+  - config/environment.local.json (real target identifiers - NEVER commit these)
+
+Read the ticket with: gh issue view $($selected.number) --repo $($config.repository.fullName)
+
+Work only on branch $branch, only in this worktree.
+
+THIS REPOSITORY IS PUBLIC. Never commit a real workspace, capacity, folder,
+tenant, user or item identifier, or any email address. Real values live only in
+config/environment.local.json, which is gitignored. Keep raw runtime evidence
+local and ignored; commit only sanitized evidence.
+
+Deploy only inside the authorised target folder from config/environment.local.json.
+Prefix every Fabric item with issue$($selected.number)_.
+Verify runtime state by reading it back - an HTTP 202 is not evidence.
+Take a folder inventory before and after and diff on name AND type.
+Enforce the data-path allowlist and read it back.
+
+Do not merge. Do not push to main. Do not delete or overwrite existing Fabric items.
+Commit your work on the feature branch and open a pull request using
+.github/pull_request_template.md, then apply the ready-for-review label.
+"@
+
+    $agentLog = Join-Path $worktree '.agent-run.log'
+    Write-Info "Agent output -> $agentLog"
+
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        Push-Location $worktree
+        $agentPrompt | & claude -p --permission-mode bypassPermissions --output-format text 2>&1 |
+            Tee-Object -FilePath $agentLog
+        $agentExit = $LASTEXITCODE
+    } finally {
+        Pop-Location
+        $ErrorActionPreference = $prevEap
+    }
+
+    Write-Host ""
+    if ($agentExit -eq 0) { Write-Ok "Developer agent finished (exit $agentExit)." }
+    else { Write-Err "Developer agent exited $agentExit. Inspect $agentLog." }
+} else {
+    Write-Warn2 'The developer agent has NOT been invoked. Start it deliberately:'
+    Write-Host "    $claudeCommand"
+}
+
 Write-Host ""
-Write-Warn2 'This dispatcher does not merge, push, or modify Fabric. Only a human may merge.'
+Write-Warn2 'This dispatcher does not merge, push to main, or modify Fabric itself. Only a human may merge.'
 
 exit $script:D_EXIT_OK
