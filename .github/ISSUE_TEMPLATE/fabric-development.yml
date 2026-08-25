@@ -1,0 +1,164 @@
+name: Fabric development ticket
+description: Request a Microsoft Fabric change to be implemented by the developer agent and independently reviewed.
+title: "[FABRIC] "
+labels: ["fabric-dev-agent"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Describe the outcome you need, not the implementation
+
+        Say what should be true when this is done and how it will be judged.
+        Leave *how* to the developer agent unless a specific approach is
+        genuinely required — an over-specified ticket hides the reasoning that
+        review depends on.
+
+        **Never paste a credential, token, password, connection string or
+        authentication output into this ticket.** Issues are permanent.
+
+  - type: textarea
+    id: business-objective
+    attributes:
+      label: Business objective
+      description: Why does this matter, and to whom? What decision, report or process depends on it?
+      placeholder: The finance team cannot see month-end margin until three days after close, which delays the close review.
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-behavior
+    attributes:
+      label: Current behaviour
+      description: What happens today? Include what is wrong, missing, slow or unreliable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: requested-outcome
+    attributes:
+      label: Requested outcome
+      description: The observable end state. What should someone be able to do, see or rely on that they cannot today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: affected-components
+    attributes:
+      label: Affected Fabric layers or components (if known)
+      description: |
+        Optional. Note anything you already know is involved — lakehouse, warehouse,
+        notebook, pipeline, semantic model, report, ontology, data agent.
+
+        Leave blank if you do not know. A guess here is worse than a blank: the
+        agent must not infer a target, and a wrong hint can send it to the wrong place.
+      placeholder: Probably the Gold layer and the Sales semantic model, but confirm.
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: Specific and checkable. Each line should be something a reviewer can confirm as satisfied or not.
+      placeholder: |
+        - Margin by product category is available for the current month
+        - Figures reconcile to the source ledger within 0.01
+        - Refresh completes in under 10 minutes
+    validations:
+      required: true
+
+  - type: textarea
+    id: validation-expectations
+    attributes:
+      label: Validation expectations
+      description: |
+        What must be proven, and how? Name the behaviour under test.
+
+        Runtime evidence must show **verified state read back after the change**,
+        not an API response that merely accepted the request. An HTTP 200, 201 or
+        202 is not evidence.
+    validations:
+      required: true
+
+  - type: textarea
+    id: documentation-expectations
+    attributes:
+      label: Documentation expectations
+      description: Which documents must be created or updated for this to be considered complete?
+    validations:
+      required: true
+
+  - type: textarea
+    id: safety-constraints
+    attributes:
+      label: Safety constraints
+      description: |
+        Boundaries beyond the standing rules in `CLAUDE.md`, which always apply.
+        Note anything specifically forbidden, any data sensitivity, refresh window
+        or blackout period.
+      placeholder: Do not touch the Finance Prod workspace. Do not run during month-end close.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: fabric-deployment-permitted
+    attributes:
+      label: Is Fabric deployment permitted for this ticket?
+      description: |
+        If yes, the explicit target must be supplied below. The agent will **stop
+        and ask** rather than infer a workspace, folder or item identifier.
+      options:
+        - "No - repository changes only, no Fabric access"
+        - "Yes - feature environment only"
+        - "Yes - stable environment (requires explicit human approval)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: fabric-target
+    attributes:
+      label: Explicit Fabric target configuration
+      description: |
+        Required if deployment is permitted. Name the workspace, folder and items
+        exactly. Write "None" if no Fabric access is required.
+
+        A blank or ambiguous value here is a stop condition, not something for the
+        agent to resolve.
+      placeholder: |
+        Environment class: feature
+        Workspace: FabricPoC-Feature
+        Folder: /Gold
+        Items in scope: nb_margin_gold, sm_sales
+      value: "None"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: human-clarification
+    attributes:
+      label: Is human clarification required before work starts?
+      options:
+        - "No - the ticket is complete as written"
+        - "Yes - see open questions below"
+    validations:
+      required: true
+
+  - type: textarea
+    id: open-questions
+    attributes:
+      label: Open questions and assumptions
+      description: Anything unresolved that would change the work if answered differently.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: This ticket contains no credentials, tokens, passwords or authentication output.
+          required: true
+        - label: I understand that only a human may merge, and that agents never merge.
+          required: true
+        - label: I understand that a stable-environment change additionally requires explicit human approval.
+          required: true

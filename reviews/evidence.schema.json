@@ -1,0 +1,381 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/StefanUSI/ms-fabric-agentic-devops/reviews/evidence.schema.json",
+  "definitions": {
+    "inventoryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["itemName", "itemType", "definitionHash"],
+      "properties": {
+        "itemName": { "type": "string" },
+        "itemId": { "type": ["string", "null"] },
+        "itemType": { "type": "string" },
+        "definitionHash": { "type": "string" },
+        "lastModifiedUtc": { "type": ["string", "null"], "format": "date-time" }
+      }
+    }
+  },
+  "title": "Developer agent evidence package",
+  "description": "Machine-readable evidence accompanying a developer-agent pull request. Documented in docs/review-evidence-standard.md. Must never contain credentials, tokens, passwords or authentication output. Fields that are genuinely not applicable are null; an empty array means applicable but nothing found.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "ticketId",
+    "branch",
+    "commitSha",
+    "generatedUtc",
+    "deploymentTarget",
+    "changedArtifacts",
+    "jobs",
+    "errors",
+    "unsupportedClaims",
+    "rollback",
+    "attestations",
+    "allowlistCheck",
+    "inventoryDiff"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "ticketId": { "type": "string", "minLength": 1, "description": "GitHub Issue number or ticket identifier." },
+    "ticketUrl": { "type": "string" },
+    "branch": { "type": "string", "minLength": 1 },
+    "commitSha": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "generatedUtc": { "type": "string", "format": "date-time" },
+    "startedUtc": { "type": ["string", "null"], "format": "date-time" },
+    "completedUtc": { "type": ["string", "null"], "format": "date-time" },
+
+    "deploymentTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["environmentClass", "targetSuppliedByTicket", "identifiersInferred"],
+      "properties": {
+        "environmentClass": { "enum": ["none", "feature", "stable"] },
+        "workspace": { "type": ["string", "null"] },
+        "folder": { "type": ["string", "null"] },
+        "items": { "type": "array", "items": { "type": "string" } },
+        "targetSuppliedByTicket": {
+          "type": "boolean",
+          "description": "Must be true whenever environmentClass is not 'none'. A target not supplied by the ticket was inferred, which is a stop condition."
+        },
+        "identifiersInferred": {
+          "type": "boolean",
+          "const": false,
+          "description": "Always false. An inferred workspace, folder or item identifier is a BLOCKED finding."
+        }
+      }
+    },
+
+    "changedArtifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "type", "change"],
+        "properties": {
+          "path": { "type": "string" },
+          "type": {
+            "enum": ["notebook", "pipeline", "semanticModel", "report", "ontology", "dataAgent",
+                     "lakehouse", "warehouse", "script", "test", "documentation", "config", "other"]
+          },
+          "change": { "enum": ["added", "modified", "deleted"] },
+          "definitionHash": { "type": ["string", "null"] }
+        }
+      }
+    },
+
+    "jobs": {
+      "type": "array",
+      "description": "Every runtime job. terminalStatus must be a terminal state; a submission acknowledgement is not a status.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "runId", "terminalStatus", "verifiedByReadBack"],
+        "properties": {
+          "name": { "type": "string" },
+          "runId": { "type": "string" },
+          "submittedUtc": { "type": ["string", "null"], "format": "date-time" },
+          "completedUtc": { "type": ["string", "null"], "format": "date-time" },
+          "terminalStatus": { "enum": ["Succeeded", "Failed", "Cancelled", "TimedOut", "Unknown"] },
+          "durationSeconds": { "type": ["number", "null"] },
+          "verifiedByReadBack": {
+            "type": "boolean",
+            "description": "True only when the status was read back from the service after completion. An accepted HTTP response does not qualify."
+          },
+          "failureDetail": { "type": ["string", "null"] }
+        }
+      }
+    },
+
+    "reconciliation": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["sourceRowCount", "goldRowCount", "delta", "tolerance", "withinTolerance"],
+      "properties": {
+        "sourceRowCount": { "type": "integer", "minimum": 0 },
+        "goldRowCount": { "type": "integer", "minimum": 0 },
+        "delta": { "type": "number" },
+        "tolerance": { "type": "number", "minimum": 0 },
+        "withinTolerance": { "type": "boolean" },
+        "method": { "type": ["string", "null"] }
+      }
+    },
+
+    "smokeTests": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "expected", "actual", "verdict"],
+        "properties": {
+          "name": { "type": "string" },
+          "expected": { "type": ["string", "number", "boolean", "null"] },
+          "actual": { "type": ["string", "number", "boolean", "null"] },
+          "verdict": { "enum": ["pass", "fail"] },
+          "durationMs": { "type": ["number", "null"] },
+          "expectedSource": {
+            "type": ["string", "null"],
+            "description": "Where the expected value came from. Must not be the run under test; self-derived expectations make every run pass."
+          }
+        }
+      }
+    },
+
+    "reportValidation": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["validated", "findings"],
+      "properties": {
+        "validated": { "type": "boolean" },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["severity", "message"],
+            "properties": {
+              "severity": { "enum": ["critical", "high", "medium", "low"] },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "ontologyValidation": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["validated", "unresolvedReferences"],
+      "properties": {
+        "validated": { "type": "boolean" },
+        "entityTypes": { "type": "array", "items": { "type": "string" } },
+        "bindings": { "type": "array", "items": { "type": "string" } },
+        "unresolvedReferences": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "errors": {
+      "type": "array",
+      "description": "Every error, including ones that were recovered from. Omitting a recovered failure misrepresents how the change was produced.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["phase", "message", "recovered"],
+        "properties": {
+          "whenUtc": { "type": ["string", "null"], "format": "date-time" },
+          "phase": { "enum": ["repositoryState", "environment", "deployment", "execution", "validation", "documentation", "other"] },
+          "message": { "type": "string" },
+          "recovered": { "type": "boolean" }
+        }
+      }
+    },
+
+    "recoveryActions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["forError", "action"],
+        "properties": {
+          "forError": { "type": "integer", "minimum": 0, "description": "Index into errors[]." },
+          "action": { "type": "string" },
+          "residualRisk": { "type": ["string", "null"] }
+        }
+      }
+    },
+
+    "humanInterventions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action", "reason"],
+        "properties": {
+          "whenUtc": { "type": ["string", "null"], "format": "date-time" },
+          "who": { "type": "string" },
+          "action": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+
+    "unsupportedClaims": {
+      "type": "array",
+      "description": "Claims the agent cannot back with a committed artefact. Declaring these is expected; a claim the reviewer finds after the agent declared none is a materially worse finding.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim", "whyUnsupported"],
+        "properties": {
+          "claim": { "type": "string" },
+          "whyUnsupported": { "type": "string" },
+          "impactIfFalse": { "type": ["string", "null"] }
+        }
+      }
+    },
+
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "fabric", "dataLossRisk"],
+      "properties": {
+        "repository": { "type": "array", "items": { "type": "string" } },
+        "fabric": { "type": "array", "items": { "type": "string" } },
+        "irreversibleSteps": { "type": "array", "items": { "type": "string" } },
+        "dataLossRisk": { "enum": ["none", "low", "medium", "high"] }
+      }
+    },
+
+    "allowlistCheck": {
+      "type": "object",
+      "description": "Every intended Fabric target checked against the ticket allowlist. Covers data paths as well as items: items live in folders, Lakehouse tables do not, so an item-only allowlist leaves a hole exactly where the damage would be.",
+      "additionalProperties": false,
+      "required": ["items", "dataPaths", "allDeclared"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "declared"],
+            "properties": {
+              "name": { "type": "string" },
+              "itemType": { "type": ["string", "null"] },
+              "declared": { "type": "boolean" },
+              "hasIssuePrefix": { "type": ["boolean", "null"], "description": "Item display names are unique per workspace, not per folder, so the issue<N>_ prefix is the real collision-avoidance control." }
+            }
+          }
+        },
+        "dataPaths": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "declared", "access"],
+            "properties": {
+              "path": { "type": "string" },
+              "declared": { "type": "boolean" },
+              "access": { "enum": ["read", "write"] }
+            }
+          }
+        },
+        "allDeclared": {
+          "type": "boolean",
+          "const": true,
+          "description": "Always true. An undeclared target is a rejected side effect, not a judgement call."
+        }
+      }
+    },
+
+    "inventoryBefore": {
+      "type": ["array", "null"],
+      "description": "Baseline of the target folder captured before deployment.",
+      "items": { "$ref": "#/definitions/inventoryEntry" }
+    },
+
+    "inventoryAfter": {
+      "type": ["array", "null"],
+      "description": "Target folder state captured after deployment.",
+      "items": { "$ref": "#/definitions/inventoryEntry" }
+    },
+
+    "inventoryDiff": {
+      "type": "object",
+      "description": "Post-deployment diff against baseline. With no Git sync-back, this is the ONLY mechanism that detects a change made outside the repository.",
+      "additionalProperties": false,
+      "required": ["added", "modified", "removed", "undeclaredChanges"],
+      "properties": {
+        "added": { "type": "array", "items": { "type": "string" } },
+        "modified": { "type": "array", "items": { "type": "string" } },
+        "removed": { "type": "array", "items": { "type": "string" } },
+        "undeclaredChanges": {
+          "type": "array",
+          "maxItems": 0,
+          "description": "Must be empty. Any entry here is a defect, not a note.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "snapshots": {
+      "type": ["array", "null"],
+      "description": "Prior definitions captured BEFORE modification. Creating an item is undone by deleting it; modifying one is undone only if the prior definition was captured first. Must be non-empty whenever any existing item was modified.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["itemName", "capturedUtc", "definitionHash", "snapshotPath"],
+        "properties": {
+          "itemName": { "type": "string" },
+          "itemId": { "type": ["string", "null"] },
+          "capturedUtc": { "type": "string", "format": "date-time" },
+          "definitionHash": { "type": "string" },
+          "snapshotPath": { "type": "string" }
+        }
+      }
+    },
+
+    "iterations": {
+      "type": ["object", "null"],
+      "description": "Developer/reviewer cycle count against the ticket ceiling. An unbounded loop is a cost and blast-radius risk.",
+      "additionalProperties": false,
+      "required": ["count", "maximum"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 1 },
+        "maximum": { "type": "integer", "minimum": 1 },
+        "ceilingReached": { "type": "boolean" }
+      }
+    },
+
+    "attestations": {
+      "type": "object",
+      "description": "Explicit statements a reviewer can independently falsify. A violation is then a false statement rather than an omission.",
+      "additionalProperties": false,
+      "required": [
+        "noCredentialsRecorded",
+        "noFabricatedResults",
+        "allMutationsVerifiedByReadBack",
+        "noIdentifiersInferred",
+        "agentDidNotMerge",
+        "agentDidNotPushToProtectedBranch",
+        "noUndeclaredFabricSideEffects",
+        "noDestructiveActionExecuted",
+        "snapshotTakenBeforeEveryModification"
+      ],
+      "properties": {
+        "noCredentialsRecorded": { "type": "boolean", "const": true },
+        "noFabricatedResults": { "type": "boolean", "const": true },
+        "allMutationsVerifiedByReadBack": { "type": "boolean", "const": true },
+        "noIdentifiersInferred": { "type": "boolean", "const": true },
+        "agentDidNotMerge": { "type": "boolean", "const": true },
+        "agentDidNotPushToProtectedBranch": { "type": "boolean", "const": true },
+        "noUndeclaredFabricSideEffects": { "type": "boolean", "const": true },
+        "noDestructiveActionExecuted": {
+          "type": "boolean",
+          "const": true,
+          "description": "No delete, rename or overwrite of an existing Fabric item was executed. Cleanup is human."
+        },
+        "snapshotTakenBeforeEveryModification": { "type": "boolean", "const": true }
+      }
+    }
+  }
+}

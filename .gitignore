@@ -1,0 +1,286 @@
+# =============================================================================
+# Agentic DevOps control plane - .gitignore
+#
+# THIS REPOSITORY IS PUBLIC.
+#
+# Nothing tracked here may contain a real workspace name, capacity name, folder
+# name, GUID, tenant identifier, region, employer name, personal or company
+# email address, or local filesystem path.
+#
+# Real environment values live in config/environment.local.json, which is
+# excluded below and must never be committed. See config/environment.json for
+# the tracked placeholder template.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Local environment configuration - REAL IDENTIFIERS LIVE HERE
+# -----------------------------------------------------------------------------
+config/environment.local.json
+*.local.json
+*.local.*
+!*.example.json
+
+# -----------------------------------------------------------------------------
+# Agent execution state - scratchpad, never reviewed, never published
+# -----------------------------------------------------------------------------
+.agent-manifest.json
+.review-manifest.json
+**/.agent-manifest.json
+**/.review-manifest.json
+.dispatcher.lock
+
+# -----------------------------------------------------------------------------
+# Third-party content - not ours to redistribute
+# -----------------------------------------------------------------------------
+Transcript*.md
+transcripts/
+
+# -----------------------------------------------------------------------------
+# Secrets, environment files and credential material
+# -----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.env
+secrets.json
+secrets.yaml
+secrets.yml
+credentials
+credentials.json
+credential*.json
+*.secret
+*.secrets
+secret.*
+*_secret.*
+*-secret.*
+*.token
+*_token.*
+*-token.*
+token.json
+tokens.json
+*.password
+passwords.*
+service-principal*.json
+client-secret*
+*.sas
+sas-token*
+auth/
+tokens/
+access-token*.json
+az-response*.json
+
+# -----------------------------------------------------------------------------
+# Keys and certificates
+# -----------------------------------------------------------------------------
+*.pem
+*.key
+*.pfx
+*.p12
+*.pkcs12
+*.jks
+*.keystore
+*.crt
+*.cer
+*.der
+*.asc
+*.gpg
+*.ppk
+id_rsa
+id_rsa.*
+id_dsa
+id_dsa.*
+id_ecdsa
+id_ecdsa.*
+id_ed25519
+id_ed25519.*
+.ssh/
+.gnupg/
+
+# -----------------------------------------------------------------------------
+# Cloud CLI / SDK state and authentication output
+# -----------------------------------------------------------------------------
+.azure/
+azure.json
+azureProfile.json
+accessTokens.json
+msal_token_cache*
+msal_http_cache*
+service_principal_entries.json
+.identity/
+*.azureauth
+.aws/
+.gcloud/
+
+# -----------------------------------------------------------------------------
+# GitHub CLI and Claude Code local state
+# -----------------------------------------------------------------------------
+.config/gh/
+hosts.yml
+gh-token*
+gh-auth*
+.claude/
+.claude.json
+.claude.json.backup
+settings.local.json
+.mcp.local.json
+
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+ENV/
+env/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.ipynb_checkpoints/
+
+# -----------------------------------------------------------------------------
+# Node
+# -----------------------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.npm/
+*.tsbuildinfo
+
+# -----------------------------------------------------------------------------
+# Runtime output, logs and generated evidence
+# -----------------------------------------------------------------------------
+logs/
+*.log
+*.log.*
+*.trace
+out/
+output/
+artifacts/
+runtime/
+*-response.json
+*-response-raw.json
+api-response*.json
+http-trace*.json
+*.har
+
+# -----------------------------------------------------------------------------
+# Diagnostic archives and dumps
+# -----------------------------------------------------------------------------
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+*.gz
+*.dmp
+*.hprof
+*.stackdump
+core.*
+diagnostic*/
+*.etl
+
+# -----------------------------------------------------------------------------
+# Temporary and machine-specific files
+# -----------------------------------------------------------------------------
+tmp/
+temp/
+.tmp/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+*.swp
+*~
+scratch/
+.scratch/
+*.pid
+
+# -----------------------------------------------------------------------------
+# Local worktree contents
+#
+# Worktrees are ephemeral agent workspaces. The directory is tracked via
+# .gitkeep so the layout survives a clone; its contents never are.
+# -----------------------------------------------------------------------------
+worktrees/*
+worktrees/*/
+!worktrees/.gitkeep
+
+# -----------------------------------------------------------------------------
+# Power BI Desktop temporary and machine-local files
+#
+# NOTE: PBIP / PBIR source definitions are tracked. Only Desktop scratch and
+# per-machine settings are excluded.
+# -----------------------------------------------------------------------------
+*.pbix
+*.pbit
+*.pbix.tmp
+~$*.pbix
+~$*.pbip
+.pbi/
+**/.pbi/
+*.abf
+*.AnalysisServicesWorkspace*/
+
+# -----------------------------------------------------------------------------
+# IDE and operating-system files
+# -----------------------------------------------------------------------------
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+.history/
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# -----------------------------------------------------------------------------
+# DELIBERATELY TRACKED - do not add ignore rules for these
+#
+# Fabric source artefacts are first-class version-controlled source, not build
+# output. The negations defend them against the broad patterns above.
+#
+# Scoped to artefact shapes only. A blanket directory negation such as
+# "!config/**" would silently re-include config/environment.local.json and
+# defeat the identifier split, because a later negation overrides an earlier
+# ignore.
+# -----------------------------------------------------------------------------
+!**/.platform
+!**/definition.pbir
+!**/definition.pbism
+!**/model.bim
+!**/*.tmdl
+!**/*.ipynb
+!**/notebook-content.py
+!**/pipeline-content.json
+!**/*.Notebook/**
+!**/*.DataPipeline/**
+!**/*.SemanticModel/**
+!**/*.Report/**
+!**/*.Ontology/**
+!**/*.DataAgent/**
+!**/*.Environment/**
+!**/*.Lakehouse/**
+!**/*.Eventhouse/**
+!**/*.Eventstream/**
+!**/*.Dataflow/**

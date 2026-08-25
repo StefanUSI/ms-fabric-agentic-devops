@@ -1,0 +1,97 @@
+{
+  "$comment": [
+    "Configuration for the local developer and reviewer dispatchers.",
+    "",
+    "This file MUST NOT contain credentials, tokens, client secrets, connection",
+    "strings, tenant identifiers or Fabric workspace/item identifiers.",
+    "Authentication is resolved at runtime from the GitHub CLI's OS-level",
+    "credential store and is never read, printed or written by these scripts."
+  ],
+
+  "schemaVersion": 1,
+
+  "repository": {
+    "owner": "StefanUSI",
+    "name": "ms-fabric-agentic-devops",
+    "fullName": "StefanUSI/ms-fabric-agentic-devops",
+    "requirePrivate": true,
+    "protectedBranches": ["main"],
+    "baseBranch": "main"
+  },
+
+  "polling": {
+    "intervalSeconds": 60,
+    "minIntervalSeconds": 30,
+    "maxIterations": 0,
+    "$comment": "maxIterations 0 means a single pass. The dispatcher is invoked deliberately; it is not a daemon in this phase."
+  },
+
+  "concurrency": {
+    "maxConcurrentDeveloperJobs": 1,
+    "maxConcurrentReviewerJobs": 1,
+    "lockFile": ".dispatcher.lock"
+  },
+
+  "labels": {
+    "eligible": "fabric-dev-agent",
+    "claimed": "agent-in-progress",
+    "blocked": "blocked",
+    "readyForReview": "ready-for-review",
+    "reviewAgent": "fabric-review-agent",
+    "changesRequested": "changes-requested",
+    "approvedByAgent": "approved-by-agent",
+    "humanDecisionRequired": "human-decision-required"
+  },
+
+  "invalidLabelCombinations": [
+    ["approved-by-agent", "changes-requested"],
+    ["approved-by-agent", "blocked"],
+    ["ready-for-review", "agent-in-progress"],
+    ["blocked", "agent-in-progress"],
+    ["blocked", "ready-for-review"],
+    ["human-decision-required", "agent-in-progress"],
+    ["human-decision-required", "ready-for-review"]
+  ],
+
+  "developer": {
+    "branchPattern": "feature/issue-{number}-{slug}",
+    "branchValidationPattern": "^feature/issue-[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$",
+    "worktreePattern": "worktrees/developer/issue-{number}",
+    "manifestPattern": "worktrees/developer/issue-{number}/.agent-manifest.json",
+    "contextFile": "config/developer-context.json",
+    "slugMaxLength": 40
+  },
+
+  "reviewer": {
+    "worktreePattern": "worktrees/reviewer/pr-{number}",
+    "manifestPattern": "worktrees/reviewer/pr-{number}/.review-manifest.json",
+    "contextFile": "config/reviewer-context.json",
+    "allowedOutcomes": ["APPROVED", "CHANGES REQUESTED", "BLOCKED"],
+    "detachedCheckout": true
+  },
+
+  "modes": {
+    "default": "DryRun",
+    "allowed": ["DryRun", "Live"],
+    "$comment": "DryRun is the default deliberately. A dispatcher defaulting to Live would turn a careless invocation into a GitHub write."
+  },
+
+  "permissions": {
+    "mayMerge": false,
+    "mayPush": false,
+    "mayForcePush": false,
+    "mayPushToProtectedBranch": false,
+    "mayDeleteBranches": false,
+    "mayDeleteWorktrees": false,
+    "mayCallFabric": false,
+    "mayCreateIssues": false,
+    "mayWriteCredentials": false,
+    "humanMergeRequired": true
+  },
+
+  "fabric": {
+    "$comment": "Intentionally empty. No Fabric environment is configured in this phase.",
+    "configured": false,
+    "targets": {}
+  }
+}

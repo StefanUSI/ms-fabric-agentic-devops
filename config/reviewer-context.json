@@ -1,0 +1,144 @@
+{
+  "$comment": [
+    "Context package loaded by the reviewer agent.",
+    "",
+    "This file MUST NOT contain credentials, tokens, client secrets, connection",
+    "strings, tenant identifiers or Fabric workspace/item identifiers.",
+    "",
+    "The 'exclude' section is the substantive part of this package. The reviewer's",
+    "value comes from what it is denied: a reviewer that sees the developer's",
+    "reasoning inherits the developer's blind spots and stops being an independent",
+    "check."
+  ],
+
+  "schemaVersion": 1,
+  "role": "reviewer",
+
+  "include": {
+    "standingRules": [
+      "CLAUDE.md"
+    ],
+    "agentRoles": [
+      "AGENTS.md"
+    ],
+    "architecture": [
+      "README.md",
+      "docs/repository-structure.md",
+      "docs/agentic-workflow.md",
+      "docs/environment-and-constraints.md"
+    ],
+    "namingConventions": [
+      "config/dispatcher.json"
+    ],
+    "securityModel": [
+      "docs/security-model.md"
+    ],
+    "reviewStandards": [
+      "docs/review-standard.md",
+      "docs/review-evidence-standard.md",
+      "reviews/REVIEW_TEMPLATE.md"
+    ],
+    "acceptanceCriteria": [
+      ".github/ISSUE_TEMPLATE/fabric-development.yml"
+    ],
+    "pullRequestArtefacts": [
+      ".github/pull_request_template.md"
+    ],
+    "committedTestEvidence": [
+      "tests/**",
+      "reviews/{ticket}/evidence.json"
+    ],
+    "toolboxContract": [
+      "docs/agent-toolbox.md"
+    ]
+  },
+
+  "suppliedByDispatcher": {
+    "$comment": "Provided at runtime via the review manifest, not stored here.",
+    "ticketBody": "github-issue",
+    "pullRequestDescription": "github-pr",
+    "diff": "git diff base...head",
+    "committedImplementation": "reviewer worktree (detached checkout of the PR head)"
+  },
+
+  "exclude": {
+    "$comment": "Never load these. Independence depends on the exclusion, not on good intentions.",
+    "developerScratchpads": [
+      "worktrees/developer/**",
+      "**/.agent-manifest.json",
+      "**/scratch/**",
+      "**/.scratch/**",
+      "**/notes.local.md",
+      "**/*.scratch.md"
+    ],
+    "developerReasoning": [
+      "developer chain-of-thought",
+      "developer session transcript",
+      "developer private notes",
+      "any claim not backed by a committed artefact"
+    ],
+    "uncommittedFiles": [
+      "any file not present in the reviewed commit",
+      "any working-tree modification in a developer worktree",
+      "stashed changes"
+    ],
+    "hiddenLocalNotes": [
+      "**/.local/**",
+      "**/*.local.*",
+      ".claude/**"
+    ],
+    "credentials": [
+      "any token, password, key, certificate or connection string",
+      "GitHub CLI or Azure CLI authentication state",
+      "OS keyring contents"
+    ],
+    "fabricWriteCapabilities": [
+      "any Fabric create, update, delete or deploy operation",
+      "any pipeline run or semantic-model refresh that mutates state"
+    ]
+  },
+
+  "microsoftLearnVerification": {
+    "$comment": "Where a claim rests on documented Microsoft Fabric behaviour, the reviewer verifies it against official documentation rather than accepting the developer's characterisation.",
+    "expected": true,
+    "source": "Microsoft Learn (learn.microsoft.com)",
+    "appliesTo": [
+      "claimed API semantics and required permissions",
+      "claimed Direct Lake framing and fallback behaviour",
+      "claimed refresh, framing and job-status semantics",
+      "claimed item-definition formats (PBIR, TMDL, notebook, pipeline, ontology)",
+      "claimed service limits, quotas and supported operations"
+    ],
+    "rule": "An undocumented or contradicted claim is an unsupported claim, not a minor inaccuracy."
+  },
+
+  "expectations": {
+    "readOnly": true,
+    "mayModifyDeveloperBranch": false,
+    "mayModifyFabric": false,
+    "mayMerge": false,
+    "mayFixFindings": false,
+    "mayFixFindingsNote": "The reviewer states corrections; it does not apply them. A reviewer that edits the code is no longer reviewing it.",
+
+    "assessDimensions": [
+      "ticket compliance",
+      "architecture",
+      "correctness",
+      "security",
+      "test evidence",
+      "documentation",
+      "unsupported claims"
+    ],
+
+    "evidenceRule": "Runtime evidence must show verified state read back after the change. A recorded HTTP 200, 201 or 202 proves acceptance, not effect, and counts as missing evidence.",
+    "uncertaintyRule": "Uncertainty is not approval. If a criterion cannot be determined, that is a finding, not a benefit of the doubt."
+  },
+
+  "verdicts": {
+    "allowed": ["APPROVED", "CHANGES REQUESTED", "BLOCKED"],
+    "recordedIn": "reviews/{ticket}/review.md",
+    "marker": "Final result:",
+    "humanMergeRequired": true,
+    "note": "APPROVED unblocks a human decision. It is never authorisation for an agent to merge, push or deploy."
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "$comment": [
+    "Context package loaded by the developer agent before it begins work.",
+    "",
+    "Contains file paths and expectations only. No credentials, tokens, secrets,",
+    "connection strings or Fabric identifiers. Real environment values live in",
+    "config/environment.local.json, which is gitignored."
+  ],
+
+  "schemaVersion": 1,
+  "role": "developer",
+
+  "include": {
+    "standingRules": [
+      "CLAUDE.md"
+    ],
+    "agentRoles": [
+      "AGENTS.md"
+    ],
+    "architecture": [
+      "README.md",
+      "docs/repository-structure.md",
+      "docs/agentic-workflow.md"
+    ],
+    "environmentAndConstraints": [
+      "docs/environment-and-constraints.md",
+      "config/environment.json"
+    ],
+    "namingAndDispatch": [
+      "config/dispatcher.json"
+    ],
+    "securityModel": [
+      "docs/security-model.md"
+    ],
+    "standards": [
+      "docs/review-standard.md",
+      "docs/review-evidence-standard.md",
+      "reviews/evidence.schema.json"
+    ],
+    "toolboxContract": [
+      "docs/agent-toolbox.md"
+    ],
+    "templates": [
+      ".github/pull_request_template.md"
+    ],
+    "tests": [
+      "tests/dispatcher.tests.ps1"
+    ]
+  },
+
+  "ticketSource": {
+    "$comment": "The active ticket is the GitHub Issue named in the execution manifest written into the worktree. Its body is supplied by the dispatcher, never hardcoded here.",
+    "type": "github-issue",
+    "manifestField": "issueNumber"
+  },
+
+  "expectations": {
+    "useDeterministicScripts": true,
+    "useDeterministicScriptsNote": "Any Fabric operation performed more than once belongs in scripts/ as a parameterised, re-runnable script. Do not re-improvise an API sequence per session.",
+
+    "verifyRuntimeState": true,
+    "verifyRuntimeStateNote": "An HTTP 200, 201 or 202 means a request was accepted, not that it took effect. Every mutation is followed by a read-back of actual state. Evidence from a response body alone is not evidence.",
+
+    "neverInferIdentifiers": true,
+    "neverInferIdentifiersNote": "Workspace, folder and item identifiers come from the ticket and config/environment.local.json, never deduced from a naming convention, the only plausible candidate, or what was used last time. Ambiguity is a stop condition.",
+
+    "resolveTargetBeforeWriting": true,
+    "resolveTargetBeforeWritingNote": "The authorised target is per-ticket. Resolve it to its REST folder GUID and verify it exists before any write. A folder name is not an address.",
+
+    "prefixTicketScopedItems": true,
+    "prefixTicketScopedItemsNote": "Item display names are unique per WORKSPACE, not per folder, so the issue-number prefix is the real collision-avoidance control.",
+
+    "allowlistCoversDataPaths": true,
+    "allowlistCoversDataPathsNote": "Items live in folders; Lakehouse tables do not. An item-only allowlist lets an inventory come back clean while table contents were overwritten.",
+
+    "recordEvidence": true,
+    "evidenceStandard": "docs/review-evidence-standard.md",
+    "evidenceOutput": "reviews/{ticket}/evidence.json",
+
+    "updateDocumentation": true,
+    "scopeDiscipline": "Modify only what the ticket allows. Work discovered outside that scope becomes a new Issue, not an addition to this one."
+  },
+
+  "prohibited": [
+    "committing or pushing to a protected branch",
+    "merging any branch",
+    "force-pushing",
+    "creating a workspace or service principal",
+    "deleting, renaming or overwriting an existing Fabric item",
+    "deploying outside the target authorised by the active ticket",
+    "inferring a Fabric workspace, folder or item identifier",
+    "writing a credential, token, password, key or connection string to any file, argument, log, commit or evidence record",
+    "resolving a documentation/ticket conflict by editing the documentation",
+    "weakening a safety control in order to complete a ticket"
+  ],
+
+  "handoff": {
+    "opensPullRequest": true,
+    "pullRequestTemplate": ".github/pull_request_template.md",
+    "mayMerge": false,
+    "mayApproveOwnWork": false,
+    "note": "The developer prepares work for review and never merges. Merge is a human decision."
+  }
+}

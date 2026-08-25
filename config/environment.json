@@ -1,0 +1,54 @@
+{
+  "$comment": [
+    "TRACKED TEMPLATE - contains placeholders only.",
+    "",
+    "This repository is PUBLIC. No real workspace name, capacity name, folder name,",
+    "GUID, tenant identifier, region, employer name or email address may ever appear",
+    "in a tracked file.",
+    "",
+    "Real values live in config/environment.local.json, which is gitignored and never",
+    "committed. Copy this file to that name and fill it in. Scripts read the local",
+    "file and fail loudly if it is missing - they never fall back to these",
+    "placeholders, because a placeholder that silently 'works' is how a wrong target",
+    "gets written to."
+  ],
+
+  "schemaVersion": 1,
+
+  "fabric": {
+    "workspaceName": "<FABRIC_WORKSPACE>",
+    "workspaceId": "<WORKSPACE_ID>",
+    "capacityName": "<FABRIC_CAPACITY>",
+    "capacityId": "<CAPACITY_ID>",
+    "region": "<REGION>",
+    "sku": "<SKU>",
+
+    "$targetComment": [
+      "There is NO standing target folder. The authorised target is supplied per",
+      "ticket by the GitHub Issue or an explicitly human-approved prompt, and must",
+      "be resolved to its REST folder GUID and verified before any write.",
+      "",
+      "The entry below exists so a ticket's target can be recorded locally for the",
+      "duration of that ticket. It is not an authorisation by itself."
+    ],
+    "authorisedTargetFolderName": "<TARGET_FOLDER>",
+    "authorisedTargetFolderId": "<FOLDER_ID>",
+    "authorisedForTicket": "<ISSUE_NUMBER>"
+  },
+
+  "github": {
+    "owner": "<GITHUB_OWNER>",
+    "repository": "<GITHUB_REPOSITORY>",
+    "baseBranch": "main"
+  },
+
+  "$isolationNote": [
+    "Folder-level isolation is ORGANIZATIONAL ONLY. It is not a security, Git,",
+    "capacity or permission boundary, and Lakehouse tables do not live in folders",
+    "at all. The allowlist in the ticket, not the folder, is the actual control.",
+    "",
+    "Agents run under a delegated user identity and inherit its permissions. Every",
+    "Fabric restriction in this repository is therefore an instruction, not a",
+    "permission. Do not describe it otherwise."
+  ]
+}
