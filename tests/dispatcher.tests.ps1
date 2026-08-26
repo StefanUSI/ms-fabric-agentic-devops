@@ -26,11 +26,14 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 
 # Branch list at start, so tests assert what THIS RUN changed rather than
 # asserting a repository state that normal operation invalidates.
-$script:BranchesAtStart = @()
+$script:BranchesAtStart  = @()
+$script:WorktreesAtStart = @()
 try {
     $prevEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     $script:BranchesAtStart = @(& git -C $repoRoot branch --format='%(refname:short)' 2>$null)
 } finally { $ErrorActionPreference = $prevEap }
+$script:WorktreesAtStart = @(Get-ChildItem (Join-Path $repoRoot 'worktrees') -Recurse -Directory -ErrorAction SilentlyContinue |
+                             ForEach-Object { $_.FullName })
 
 $script:Pass = 0
 $script:Fail = 0
@@ -501,8 +504,12 @@ Test-Case 'this test run created no branch in the real repository' {
     try { $after = @(& git -C $repoRoot branch --format='%(refname:short)' 2>$null) } finally { $ErrorActionPreference = $p }
     ((@($after) | Sort-Object) -join '|') -eq ((@($script:BranchesAtStart) | Sort-Object) -join '|')
 }
-Test-Case 'no developer or reviewer worktree exists' {
-    (@(Get-ChildItem (Join-Path $repoRoot 'worktrees') -Recurse -Directory -ErrorAction SilentlyContinue)).Count -eq 0
+# Same reasoning as the branch assertion above: "no worktree exists" is false
+# whenever a ticket is legitimately in flight. Assert that THIS RUN created none.
+Test-Case 'this test run created no worktree in the real repository' {
+    $after = @(Get-ChildItem (Join-Path $repoRoot 'worktrees') -Recurse -Directory -ErrorAction SilentlyContinue |
+               ForEach-Object { $_.FullName })
+    ((@($after) | Sort-Object) -join '|') -eq ((@($script:WorktreesAtStart) | Sort-Object) -join '|')
 }
 
 # =============================================================================

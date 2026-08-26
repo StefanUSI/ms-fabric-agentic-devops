@@ -51,7 +51,11 @@ param(
 
     # Ceiling on developer/reviewer cycles for this ticket. Two headless agents
     # can loop; each iteration costs budget and touches a shared capacity.
-    [int]$MaxIterations = 3
+    [int]$MaxIterations = 3,
+
+    # Continue an unfinished attempt on the same ticket, reusing its existing
+    # branch and worktree instead of refusing them as a collision.
+    [switch]$Resume
 )
 
 Set-StrictMode -Version Latest
@@ -98,7 +102,8 @@ if (-not $SkipBaselineChecks) {
         foreach ($r in $baseline.Reasons) { Write-Err "  - $r" }
         exit $script:D_EXIT_BASELINE
     }
-    Write-Ok "Baseline OK: private repository, on '$($config.repository.baseBranch)', clean tree."
+    $visLabel = if ($config.repository.requirePrivate) { 'private repository' } else { 'visibility as configured' }
+    Write-Ok "Baseline OK: $visLabel, on '$($config.repository.baseBranch)', clean tree."
 }
 
 # --- Concurrency: one ticket at a time ---------------------------------------
@@ -197,10 +202,22 @@ Write-Ok "Worktree: $worktree"
 
 [void](Invoke-GitD -Arguments @('show-ref', '--verify', '--quiet', "refs/heads/$branch"))
 $branchExists = ($script:LastGitExitCode -eq 0)
-if ($branchExists) { Write-Err "Branch '$branch' already exists."; if ($Mode -eq 'Live') { exit $script:D_EXIT_EXISTS } }
-if (Test-Path -LiteralPath $worktree) {
-    Write-Err "Worktree '$worktree' already exists."
-    if ($Mode -eq 'Live') { exit $script:D_EXIT_EXISTS }
+# An existing branch/worktree normally means a collision and is refused. With
+# -Resume it means a previous attempt on THIS ticket did not finish -- for
+# example the agent failed to launch -- and the same isolated workspace is
+# reused rather than abandoned. Resume never applies to a different ticket:
+# the paths are derived from this Issue number.
+$reuseExisting = $false
+if ($branchExists -or (Test-Path -LiteralPath $worktree)) {
+    if ($Resume) {
+        Write-Warn2 "Resuming Issue #$($selected.number): reusing existing branch and worktree."
+        $reuseExisting = $true
+    } else {
+        if ($branchExists)                        { Write-Err "Branch '$branch' already exists." }
+        if (Test-Path -LiteralPath $worktree)     { Write-Err "Worktree '$worktree' already exists." }
+        Write-Err 'Pass -Resume to continue an unfinished attempt on this same ticket.'
+        if ($Mode -eq 'Live') { exit $script:D_EXIT_EXISTS }
+    }
 }
 
 # --- Context package ---------------------------------------------------------
@@ -274,13 +291,22 @@ Write-Phase 'LIVE: claiming ticket'
 if ($script:LastGhExitCode -ne 0) { Write-Err 'Failed to apply the claim label. Stopping before any local change.'; exit $script:D_EXIT_GH_FAILED }
 Write-Ok "Applied '$($config.labels.claimed)' to #$($selected.number)."
 
-Write-Phase 'LIVE: creating branch and worktree'
-[void](Invoke-GitD -Arguments @('worktree', 'add', '-b', $branch, $worktree, $config.repository.baseBranch))
-if ($script:LastGitExitCode -ne 0 -or -not (Test-Path -LiteralPath $worktree)) {
-    Write-Err 'Failed to create the worktree. The Issue remains claimed; clear the label manually after investigating.'
-    exit $script:D_EXIT_GH_FAILED
+if ($reuseExisting) {
+    Write-Phase 'LIVE: reusing existing branch and worktree'
+    if (-not (Test-Path -LiteralPath $worktree)) {
+        Write-Err "Resume requested but worktree '$worktree' is absent. Refusing to guess; remove the branch or restore the worktree."
+        exit $script:D_EXIT_EXISTS
+    }
+    Write-Ok "Reusing branch '$branch' and worktree '$worktree'."
+} else {
+    Write-Phase 'LIVE: creating branch and worktree'
+    [void](Invoke-GitD -Arguments @('worktree', 'add', '-b', $branch, $worktree, $config.repository.baseBranch))
+    if ($script:LastGitExitCode -ne 0 -or -not (Test-Path -LiteralPath $worktree)) {
+        Write-Err 'Failed to create the worktree. The Issue remains claimed; clear the label manually after investigating.'
+        exit $script:D_EXIT_GH_FAILED
+    }
+    Write-Ok "Created branch '$branch' and worktree '$worktree'."
 }
-Write-Ok "Created branch '$branch' and worktree '$worktree'."
 
 Write-Phase 'LIVE: propagating local environment configuration'
 # A worktree is a checkout of TRACKED files only. config/environment.local.json
@@ -363,13 +389,17 @@ Commit your work on the feature branch and open a pull request using
 .github/pull_request_template.md, then apply the ready-for-review label.
 "@
 
-    $agentLog = Join-Path $worktree '.agent-run.log'
+    # Resolve to an ABSOLUTE path before changing directory. A relative path
+    # here would be re-resolved against the worktree after Push-Location,
+    # producing a doubled path that does not exist -- Tee-Object then fails and
+    # the agent never launches.
+    $agentLog = Join-Path ((Resolve-Path -LiteralPath $worktree).Path) '.agent-run.log'
     Write-Info "Agent output -> $agentLog"
 
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        Push-Location $worktree
+        Push-Location -LiteralPath $worktree
         $agentPrompt | & claude -p --permission-mode bypassPermissions --output-format text 2>&1 |
             Tee-Object -FilePath $agentLog
         $agentExit = $LASTEXITCODE
