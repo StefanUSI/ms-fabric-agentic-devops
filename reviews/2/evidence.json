@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 1,
+  "ticketId": "2",
+  "ticketUrl": "https://github.com/StefanUSI/ms-fabric-agentic-devops/issues/2",
+  "branch": "feature/issue-2-fabric-build-a-synthetic-retail-medallio",
+  "commitSha": "9530d50",
+  "generatedUtc": "2026-08-26T00:00:00Z",
+  "startedUtc": "2026-08-26T00:00:00Z",
+  "completedUtc": "2026-08-26T00:00:00Z",
+
+  "deploymentTarget": {
+    "environmentClass": "feature",
+    "modifiesExistingItems": [],
+    "workspace": null,
+    "folder": null,
+    "items": [],
+    "targetSuppliedByTicket": true,
+    "identifiersInferred": false
+  },
+
+  "changedArtifacts": [
+    { "path": "src/issue2-retail-medallion/data-contract.json", "type": "config", "change": "added", "definitionHash": null },
+    { "path": "src/issue2-retail-medallion/items/issue2_retail_lakehouse.Lakehouse/.platform", "type": "lakehouse", "change": "added", "definitionHash": null },
+    { "path": "src/issue2-retail-medallion/items/issue2_00_generate_source.Notebook/notebook-content.py", "type": "notebook", "change": "added", "definitionHash": null },
+    { "path": "src/issue2-retail-medallion/items/issue2_10_bronze_ingest.Notebook/notebook-content.py", "type": "notebook", "change": "added", "definitionHash": null },
+    { "path": "src/issue2-retail-medallion/items/issue2_20_silver_transform.Notebook/notebook-content.py", "type": "notebook", "change": "added", "definitionHash": null },
+    { "path": "src/issue2-retail-medallion/items/issue2_30_gold_build.Notebook/notebook-content.py", "type": "notebook", "change": "added", "definitionHash": null },
+    { "path": "src/issue2-retail-medallion/items/issue2_90_validate.Notebook/notebook-content.py", "type": "notebook", "change": "added", "definitionHash": null },
+    { "path": "src/issue2-retail-medallion/items/issue2_retail_medallion_pipeline.DataPipeline/pipeline-content.json", "type": "pipeline", "change": "added", "definitionHash": null },
+    { "path": "config/issue2-allowlist.json", "type": "config", "change": "added", "definitionHash": null },
+    { "path": "scripts/fabric/FabricToolbox.ps1", "type": "script", "change": "added", "definitionHash": null },
+    { "path": "scripts/fabric/Deploy-Issue2Medallion.ps1", "type": "script", "change": "added", "definitionHash": null },
+    { "path": "scripts/fabric/Write-Issue2Evidence.ps1", "type": "script", "change": "added", "definitionHash": null },
+    { "path": "tests/issue2-validation.tests.ps1", "type": "test", "change": "added", "definitionHash": null },
+    { "path": "docs/issue2-retail-medallion.md", "type": "documentation", "change": "added", "definitionHash": null },
+    { "path": "reviews/2/reversal-plan.md", "type": "documentation", "change": "added", "definitionHash": null },
+    { "path": "docs/agent-toolbox.md", "type": "documentation", "change": "modified", "definitionHash": null },
+    { "path": "docs/review-evidence-standard.md", "type": "documentation", "change": "modified", "definitionHash": null }
+  ],
+
+  "jobs": [],
+
+  "reconciliation": null,
+
+  "smokeTests": null,
+
+  "reportValidation": null,
+  "ontologyValidation": null,
+
+  "errors": [
+    {
+      "whenUtc": "2026-08-26T00:00:00Z",
+      "phase": "environment",
+      "message": "Deployment blocked at the authorisation gate, exit code 28. config/environment.local.json has fabric.authorisedForTicket = null; the allowlist and the tracked template both expect the string \"2\". Independently, .agent-manifest.json sets permissions.mayCallFabric = false and fabricConfigured = false. Issue #2 authorises Fabric deployment but supplies the target by reference to the local configuration, which is not bound to this ticket.",
+      "recovered": false
+    },
+    {
+      "whenUtc": "2026-08-26T00:00:00Z",
+      "phase": "validation",
+      "message": "Eight offline tests failed with 'The property Count cannot be found on this object'. Windows PowerShell unrolls a returned collection onto the pipeline, so an empty or single-element result from Test-Issue2AuditFile reached the caller as $null or as a bare string, and .Count on either is a hard error under Set-StrictMode.",
+      "recovered": true
+    },
+    {
+      "whenUtc": "2026-08-26T00:00:00Z",
+      "phase": "deployment",
+      "message": "Plan mode contacted the Fabric API. Publish-FabricItemDefinition queried for an existing item before honouring -WhatIf, so a dry run required a token and network access and could not be executed by a reviewer from a cold checkout.",
+      "recovered": true
+    }
+  ],
+
+  "recoveryActions": [
+    {
+      "forError": 0,
+      "action": "Not recovered, deliberately. The gate was left shut and the ticket escalated to a human. An agent setting fabric.authorisedForTicket would be opening its own authorisation gate, which CLAUDE.md rule 12 forbids as plainly as any other way of weakening a control to finish a ticket. All work not dependent on the gate was completed instead.",
+      "residualRisk": "The solution has never executed against Fabric. Every claim about runtime behaviour is derived from contract arithmetic and offline tests, not observed. The pipeline and notebook definition shapes are unverified against a live tenant and are the most likely source of first-run failure."
+    },
+    {
+      "forError": 1,
+      "action": "Returned the result with the comma operator in Test-Issue2AuditFile and Get-FabricFolderInventory, so a caller always receives an array. All 62 tests then passed.",
+      "residualRisk": "None. The failure mode was in the guard's return shape, not in its logic, and the tests that exercise the guard's rejection behaviour all pass."
+    },
+    {
+      "forError": 2,
+      "action": "Moved the -WhatIf return above the API lookup. Plan mode is now fully offline. The pre-existing-item check was not merely relocated: a plan-time collision check is stale by the time the deployment runs, so the createOnly guard at write time is the real control and the plan now says so explicitly.",
+      "residualRisk": "A plan no longer reports a pre-existing name collision in advance. Accepted: the createOnly guard refuses the write at the moment it matters, which is the check that cannot go stale."
+    }
+  ],
+
+  "humanInterventions": [],
+
+  "unsupportedClaims": [
+    {
+      "claim": "The medallion pipeline runs successfully end to end in Microsoft Fabric.",
+      "whyUnsupported": "No pipeline has been executed. Deployment was blocked at the authorisation gate. jobs[] is empty and there is no run id, no terminal status and no audit file.",
+      "impactIfFalse": "The solution may fail on first execution. The most likely causes are the TridentNotebook activity shape, the pipeline definition schema, or notebookutils.fs availability in the Spark runtime."
+    },
+    {
+      "claim": "Row counts, quarantine breakdown, row conservation, primary-key uniqueness and financial reconciliation match the data contract at runtime.",
+      "whyUnsupported": "These values are derived arithmetically from the generation parameters and asserted by offline tests against the contract. No table has been written or read back. reconciliation is null for this reason, not by exemption.",
+      "impactIfFalse": "A transformation defect would not have been caught. The assertions exist in issue2_90_validate and would fail the pipeline on a real run, but that has not been demonstrated."
+    },
+    {
+      "claim": "The solution is idempotent across two runs.",
+      "whyUnsupported": "Idempotency is argued from design (deterministic generation with no RNG, and mode(overwrite) on every write of a ticket-owned path) and asserted by code that has not executed. No second run has been compared to a first.",
+      "impactIfFalse": "A re-run could double rows or produce different Gold content. Row conservation and the content-hash comparison would both catch it at runtime."
+    },
+    {
+      "claim": "No undeclared Fabric side effect occurred.",
+      "whyUnsupported": "Trivially true because no Fabric write occurred, but no inventory was captured. inventoryBefore and inventoryAfter are null, and inventoryDiff is empty because there was nothing to diff, not because a diff was computed and came back clean.",
+      "impactIfFalse": "None in the current state. On a real deployment this claim would require the captured baseline the package does not contain."
+    },
+    {
+      "claim": "The attestations allMutationsVerifiedByReadBack and snapshotTakenBeforeEveryModification are satisfied.",
+      "whyUnsupported": "Both are vacuously true: there were zero mutations and zero modifications. They are recorded as true because the schema requires the constant, but they attest to nothing that was exercised.",
+      "impactIfFalse": "None now. Flagged so a reviewer does not read them as evidence that read-back verification was demonstrated."
+    },
+    {
+      "claim": "The Fabric REST API accepts folderId on item creation and reports it back.",
+      "whyUnsupported": "An assumption in Publish-FabricItemDefinition, unverified against a live tenant. The function verifies the landing folder on read-back and fails if it differs, so a wrong assumption would surface as a failure rather than a misplaced item.",
+      "impactIfFalse": "Items could be created outside the authorised folder. The read-back check is designed to catch exactly this, but has not run."
+    }
+  ],
+
+  "rollback": {
+    "repository": [
+      "Close the pull request without merging.",
+      "Delete the feature branch (human action).",
+      "No commit exists on main; all work is confined to the unmerged feature branch."
+    ],
+    "fabric": [
+      "Nothing to reverse. No Fabric item was created, modified, renamed or deleted, and no data path was written.",
+      "If a later Live run deploys this ticket, follow reviews/2/reversal-plan.md: delete the pipeline, then the five notebooks, then issue2_retail_lakehouse last.",
+      "No agent executes any reversal step. Cleanup is human (CLAUDE.md rule 5)."
+    ],
+    "irreversibleSteps": [],
+    "dataLossRisk": "none"
+  },
+
+  "allowlistCheck": {
+    "items": [
+      { "name": "issue2_retail_lakehouse", "itemType": "Lakehouse", "declared": true, "hasIssuePrefix": true },
+      { "name": "issue2_00_generate_source", "itemType": "Notebook", "declared": true, "hasIssuePrefix": true },
+      { "name": "issue2_10_bronze_ingest", "itemType": "Notebook", "declared": true, "hasIssuePrefix": true },
+      { "name": "issue2_20_silver_transform", "itemType": "Notebook", "declared": true, "hasIssuePrefix": true },
+      { "name": "issue2_30_gold_build", "itemType": "Notebook", "declared": true, "hasIssuePrefix": true },
+      { "name": "issue2_90_validate", "itemType": "Notebook", "declared": true, "hasIssuePrefix": true },
+      { "name": "issue2_retail_medallion_pipeline", "itemType": "DataPipeline", "declared": true, "hasIssuePrefix": true }
+    ],
+    "dataPaths": [
+      { "path": "issue2_retail_lakehouse/Files/issue2/landing/**", "declared": true, "access": "write" },
+      { "path": "issue2_retail_lakehouse/Files/issue2/evidence/**", "declared": true, "access": "write" },
+      { "path": "issue2_retail_lakehouse/Tables/issue2_bronze_sales", "declared": true, "access": "write" },
+      { "path": "issue2_retail_lakehouse/Tables/issue2_bronze_stores", "declared": true, "access": "write" },
+      { "path": "issue2_retail_lakehouse/Tables/issue2_bronze_products", "declared": true, "access": "write" },
+      { "path": "issue2_retail_lakehouse/Tables/issue2_bronze_customers", "declared": true, "access": "write" },
+      { "path": "issue2_retail_lakehouse/Tables/issue2_silver_sales", "declared": true, "access": "write" },
+      { "path": "issue2_retail_lakehouse/Tables/issue2_silver_quarantine_sales", "declared": true, "access": "write" },
+      { "path": "issue2_retail_lakehouse/Tables/issue2_silver_dim_store", "declared": true, "access": "write" },
+      { "path": "issue2_retail_lakehouse/Tables/issue2_silver_dim_product", "declared": true, "access": "write" },
+      { "path": "issue2_retail_lakehouse/Tables/issue2_silver_dim_customer", "declared": true, "access": "write" },
+      { "path": "issue2_retail_lakehouse/Tables/issue2_gold_daily_store_sales", "declared": true, "access": "write" },
+      { "path": "issue2_retail_lakehouse/Tables/issue2_gold_product_performance", "declared": true, "access": "write" },
+      { "path": "issue2_retail_lakehouse/Tables/issue2_gold_customer_segment_kpi", "declared": true, "access": "write" }
+    ],
+    "allDeclared": true
+  },
+
+  "inventoryBefore": null,
+  "inventoryAfter": null,
+
+  "inventoryDiff": {
+    "added": [],
+    "modified": [],
+    "removed": [],
+    "undeclaredChanges": []
+  },
+
+  "snapshots": null,
+
+  "iterations": {
+    "count": 1,
+    "maximum": 3,
+    "ceilingReached": false
+  },
+
+  "attestations": {
+    "noCredentialsRecorded": true,
+    "noFabricatedResults": true,
+    "allMutationsVerifiedByReadBack": true,
+    "noIdentifiersInferred": true,
+    "agentDidNotMerge": true,
+    "agentDidNotPushToProtectedBranch": true,
+    "noUndeclaredFabricSideEffects": true,
+    "noDestructiveActionExecuted": true,
+    "snapshotTakenBeforeEveryModification": true
+  }
+}
