@@ -102,7 +102,7 @@ Any of the following is **Critical** and **BLOCKED**, without exception:
 - A secret passed as a command-line argument
 - Authentication output or keyring content recorded anywhere
 - A write to a protected branch, or a merge performed by an agent
-- A stable environment modified without an approved ticket and explicit target
+- A existing Fabric item modified without being named in the Issue
 - Any safety control in `CLAUDE.md` relaxed, bypassed or "temporarily" disabled
 
 Reporting rules: record the **file path, line number and category only**. Never

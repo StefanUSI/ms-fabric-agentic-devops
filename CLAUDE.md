@@ -41,12 +41,25 @@ If a credential is discovered in the working tree, **stop immediately**, report
 only the file path, line number and category of secret, and never print the
 value.
 
-## 5. Never modify a stable Fabric environment without an approved ticket and an explicit target configuration
+## 5. Create new prefixed items only. Never modify an existing item the Issue does not name
 
-A stable environment is changed only when **both** conditions hold:
+This is the **default for every Issue** and needs no restatement in the ticket.
 
-1. An approved ticket authorises the specific change, and
-2. An explicit target configuration names the workspace, folder and items.
+- **Create** new items prefixed with the Issue number. Always permitted once the
+  Issue authorises Fabric deployment.
+- **Modify** an existing item only when that specific item is **named in the
+  Issue**, and only after its definition has been snapshotted so the change is
+  reversible.
+- **Rename or delete** — never. Deletion is not automatic; cleanup is human.
+
+There is no feature-versus-stable classification. An Issue either authorises
+Fabric deployment or it does not, and the authorised target is the one supplied
+by the approved local environment configuration. That distinction was removed
+because it produced ambiguity without adding a control: the real protections are
+the target reference, the create-only default, and the named-item exception.
+
+**Stop if the local environment configuration is absent, invalid or ambiguous.**
+Do not infer or substitute another target.
 
 ## 6. Never infer a Fabric workspace, folder or item identifier
 
@@ -97,7 +110,7 @@ spots, and the review stops being independent.
 Two gates are always human:
 
 - **Merge** into `main`
-- **Deployment** to a stable environment
+- **Modification** of an existing Fabric item
 
 Agents prepare, evidence, and recommend. Humans decide.
 

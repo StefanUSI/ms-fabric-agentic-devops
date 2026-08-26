@@ -15,7 +15,7 @@ Closes #<issue-number>
 | Ticket | #<issue-number> |
 | Branch | `feature/issue-<number>-<short-name>` |
 | Base | `main` |
-| Fabric deployment permitted | Yes (feature) / Yes (stable) / No |
+| Fabric deployment authorized | Yes / No |
 
 ## 2. Summary
 
@@ -45,11 +45,12 @@ scope must be called out explicitly.*
 *Every workspace, folder and item written to, with its identifier exactly as
 supplied by the ticket. Write "None" if no Fabric access occurred.*
 
-| Workspace | Folder | Item | Operation | Environment class |
+| Workspace | Folder | Item | Operation | Named in the Issue? |
 |---|---|---|---|---|
-| | | | create / update / none | feature / stable / none |
+| | | | create / update / none | n/a for new items; **required** for update |
 
-- [ ] Every target above appears verbatim in the ticket's explicit target configuration
+- [ ] The target came from the approved local environment configuration, and was verified before writing
+- [ ] Every **modified** existing item is named in the Issue
 - [ ] No identifier was inferred, guessed or matched by name
 
 ## 6. Deployment evidence
@@ -107,7 +108,7 @@ mid-run failure misrepresents how the change was produced.*
 | No credential passed as a command-line argument | ☐ Pass ☐ **Fail** |
 | No write to a protected branch; no merge performed | ☐ Pass ☐ **Fail** |
 | No safety control in `CLAUDE.md` weakened or bypassed | ☐ Pass ☐ **Fail** |
-| No stable environment modified without explicit approval | ☐ Pass ☐ N/A ☐ **Fail** |
+| No existing Fabric item modified without explicit approval | ☐ Pass ☐ N/A ☐ **Fail** |
 
 Any **Fail** is an automatic **BLOCKED**.
 
@@ -167,7 +168,7 @@ Criteria: [`docs/review-standard.md`](../docs/review-standard.md)
 
 > **Only a human may merge.** An `APPROVED` verdict is a recommendation that
 > unblocks a human decision. It is never authorisation for an agent to merge,
-> push to `main`, or deploy to a stable environment.
+> push to `main`, or modify an existing Fabric item the Issue does not name.
 
 - [ ] Reviewer verdict is `APPROVED`
 - [ ] I have read the diff myself, not only the summary
@@ -175,5 +176,5 @@ Criteria: [`docs/review-standard.md`](../docs/review-standard.md)
 - [ ] Fabric targets match the ticket exactly
 - [ ] Security section is all Pass
 - [ ] Rollback procedure is workable
-- [ ] Any stable-environment deployment is separately and explicitly approved
+- [ ] Any modification of an existing item is separately and explicitly approved
 - [ ] I accept responsibility for this merge
