@@ -158,7 +158,7 @@ into a GitHub write.
 Three things are always human:
 
 1. **Merging** into `main`
-2. **Deploying** to a stable environment
+2. **Deploying** to a existing Fabric item
 3. **Clearing** a `blocked` or `human-decision-required` ticket
 
 Agents prepare, evidence and recommend. Humans decide.

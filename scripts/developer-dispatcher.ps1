@@ -122,9 +122,22 @@ $claimedJson = (Invoke-Gh -Arguments @(
 if ($script:LastGhExitCode -ne 0) { Write-Err 'Failed to query claimed Issues.'; exit $script:D_EXIT_GH_FAILED }
 
 $claimed = @(ConvertFrom-GhJsonArray -Json $claimedJson)
-if ($claimed.Count -ge [int]$config.concurrency.maxConcurrentDeveloperJobs) {
-    Write-Err "$($claimed.Count) Issue(s) already carry '$($config.labels.claimed)'. Refusing to start another."
-    foreach ($c in $claimed) { Write-Err "  - #$(Get-Prop $c 'number') $(Get-Prop $c 'title')" }
+
+# When resuming, the ticket being resumed is expected to carry the claim label -
+# the previous attempt applied it. Exempt that one Issue only. Any OTHER claimed
+# Issue still blocks: the point of the limit is that two tickets never run at
+# once, not that a ticket can never be retried.
+$blocking = $claimed
+if ($Resume -and $IssueNumber -gt 0) {
+    $blocking = @($claimed | Where-Object { [int](Get-Prop $_ 'number' 0) -ne $IssueNumber })
+    $exempt = @($claimed).Count - @($blocking).Count
+    if ($exempt -gt 0) { Write-Warn2 "Resume: exempting Issue #$IssueNumber from the concurrency check." }
+}
+
+if (@($blocking).Count -ge [int]$config.concurrency.maxConcurrentDeveloperJobs) {
+    Write-Err "$(@($blocking).Count) Issue(s) already carry '$($config.labels.claimed)'. Refusing to start another."
+    foreach ($c in $blocking) { Write-Err "  - #$(Get-Prop $c 'number') $(Get-Prop $c 'title')" }
+    if (-not $Resume) { Write-Err 'If this is an unfinished attempt on that same ticket, pass -Resume -IssueNumber <n>.' }
     exit $script:D_EXIT_CONCURRENCY
 }
 Write-Ok 'No developer job in progress.'
@@ -169,10 +182,16 @@ foreach ($issue in $candidates) {
         exit $script:D_EXIT_AMBIGUOUS
     }
 
-    if (-not (Test-TicketEligible -Labels $labels -Config $config)) {
+    # A resumed ticket already carries the claim label from its failed attempt,
+    # so it fails the normal eligibility test. Exempt only the explicitly named
+    # Issue, and only when -Resume was passed - never a ticket picked by polling.
+    $isResumeTarget = ($Resume -and $IssueNumber -gt 0 -and [int]$issue.number -eq $IssueNumber)
+
+    if (-not $isResumeTarget -and -not (Test-TicketEligible -Labels $labels -Config $config)) {
         Write-Info "Skipping #$($issue.number): not eligible (labels: $($labels -join ', '))."
         continue
     }
+    if ($isResumeTarget) { Write-Warn2 "Resume target #$($issue.number): eligibility check bypassed for this ticket only." }
     $selected = $issue
     break
 }
@@ -257,13 +276,13 @@ foreach ($f in $contextFiles) { Write-Host "      - $f" }
 Write-Host ""
 Write-Host "  Actions requiring later Fabric permission (NOT performed in this phase):"
 foreach ($a in @(
-    'create an isolated Fabric feature environment',
+    'create an isolated Fabric the authorised target',
     'deploy Fabric item definitions',
     'run a Fabric pipeline and poll its job status',
     'validate Gold table results',
     'refresh and frame a Direct Lake semantic model',
     'run DAX smoke tests',
-    'clean up the feature environment')) {
+    'clean up the the authorised target')) {
     Write-Host "      - $a"
 }
 Write-Host ""

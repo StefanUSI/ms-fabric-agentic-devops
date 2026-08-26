@@ -42,7 +42,7 @@ the job reached a terminal success state, the query returns the expected value.
 | 2 | Branch | Feature branch the work was produced on |
 | 3 | Commit SHA | Exact commit the evidence was produced from |
 | 4 | Changed artifacts | What changed, by type and path |
-| 5 | Deployment target | Workspace, folder, items and environment class |
+| 5 | Deployment target | Workspace, folder and items, resolved from the approved local environment configuration |
 | 6 | Timestamps | Start and end, UTC, ISO 8601 |
 | 7 | Runtime jobs and final statuses | Every job, its run id and its **terminal** status |
 | 8 | Source and Gold reconciliation | Counts and deltas against tolerance |
@@ -113,7 +113,7 @@ Instance: `reviews/<ticket>/evidence.json`
   "completedUtc": "2026-08-25T00:00:00Z",
 
   "deploymentTarget": {
-    "environmentClass": "feature",
+    "modifiesExistingItems": [],
     "workspace": "<workspace>",
     "folder": "<folder>",
     "items": ["<item>"],

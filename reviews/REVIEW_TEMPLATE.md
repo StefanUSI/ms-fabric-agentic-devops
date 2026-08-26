@@ -13,7 +13,7 @@
 >
 > This review produces a verdict, never a merge. No agent — developer or
 > reviewer — may merge a branch, push to a protected branch, or deploy to a
-> stable environment. An **APPROVED** verdict is a recommendation that unblocks
+> existing Fabric item. An **APPROVED** verdict is a recommendation that unblocks
 > a human decision; it is not authorisation for any agent to act on it.
 >
 > The reviewer must not modify the developer branch or Microsoft Fabric. A

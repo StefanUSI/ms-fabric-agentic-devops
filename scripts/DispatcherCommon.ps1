@@ -331,7 +331,7 @@ function Test-ConcurrencyFree {
         Confirms no other dispatcher job is active.
 
         Concurrency is excluded on purpose: two agents writing to the same
-        feature environment produce interleaved state that neither the evidence
+        the authorised target produce interleaved state that neither the evidence
         nor the reviewer can untangle.
     #>
     param([Parameter(Mandatory)]$Config)

@@ -24,7 +24,7 @@ The Developer Agent:
 - **Modifies only files required for the ticket.** Work discovered outside that
   scope becomes a new ticket in a new GitHub Issue; it is not quietly folded
   into the current change.
-- **Deploys only to an explicitly permitted feature environment.** The target
+- **Deploys only to the target from the approved local environment configuration.** The target
   workspace, folder and items are named in the ticket's target configuration.
   If the target is missing, ambiguous or does not resolve, the agent stops and
   asks. It never infers a target.
@@ -41,7 +41,7 @@ The Developer Agent:
 
 - **Never commits directly to `main`.**
 - **Never merges.** Not into `main`, not into another feature branch.
-- **Never deploys to the stable environment without approval.**
+- **Never modifies an existing Fabric item unless the Issue names it.**
 - Never writes credentials, tokens or secrets anywhere.
 - Never modifies the reviewer's worktree or review records.
 

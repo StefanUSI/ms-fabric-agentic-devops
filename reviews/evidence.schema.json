@@ -48,15 +48,23 @@
     "deploymentTarget": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["environmentClass", "targetSuppliedByTicket", "identifiersInferred"],
+      "required": ["targetSuppliedByTicket", "identifiersInferred"],
       "properties": {
-        "environmentClass": { "enum": ["none", "feature", "stable"] },
+        "environmentClass": {
+          "enum": ["none", "feature", "stable"],
+          "description": "DEPRECATED and optional. The feature/stable distinction was removed: an Issue either authorises Fabric deployment or it does not, the target comes from the approved local environment configuration, and the default is create-new-prefixed-items-only. Retained so evidence from tickets raised under the earlier model still validates."
+        },
+        "modifiesExistingItems": {
+          "type": "array",
+          "description": "Existing Fabric items this ticket modified. MUST be empty unless the Issue named each one explicitly. Creating new prefixed items is the default and needs no entry here.",
+          "items": { "type": "string" }
+        },
         "workspace": { "type": ["string", "null"] },
         "folder": { "type": ["string", "null"] },
         "items": { "type": "array", "items": { "type": "string" } },
         "targetSuppliedByTicket": {
           "type": "boolean",
-          "description": "Must be true whenever environmentClass is not 'none'. A target not supplied by the ticket was inferred, which is a stop condition."
+          "description": "Must be true whenever any Fabric write occurred. The target comes from the approved local environment configuration named by the Issue; a target not supplied that way was inferred, which is a stop condition."
         },
         "identifiersInferred": {
           "type": "boolean",

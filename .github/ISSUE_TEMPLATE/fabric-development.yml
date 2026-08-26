@@ -100,38 +100,55 @@ body:
     validations:
       required: false
 
-  - type: dropdown
-    id: fabric-deployment-permitted
+  - type: checkboxes
+    id: fabric-deployment-authorized
     attributes:
-      label: Is Fabric deployment permitted for this ticket?
+      label: Fabric deployment
       description: |
-        If yes, the explicit target must be supplied below. The agent will **stop
-        and ask** rather than infer a workspace, folder or item identifier.
+        Leave unticked for a repository-only change. Tick it to authorise this
+        Issue to deploy to Fabric.
       options:
-        - "No - repository changes only, no Fabric access"
-        - "Yes - feature environment only"
-        - "Yes - stable environment (requires explicit human approval)"
-    validations:
-      required: true
+        - label: Fabric deployment authorized for this Issue
+          required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        ### Fabric target
+
+        **Use the approved ignored local environment configuration. Stop if it is
+        absent, invalid or ambiguous. Do not infer or use another Fabric target.**
+
+        The target is deliberately **not** written here. This repository is
+        public, so naming a workspace, capacity, folder or GUID in an Issue would
+        itself be the exposure these tickets forbid. The reference is explicit
+        and resolvable, which is what the no-inference rule requires - it exists
+        to stop an agent choosing a target for itself, not to force the value
+        into public text.
+
+        ### Default deployment rule
+
+        **Create new ticket-prefixed items only. Do not modify, rename or delete
+        existing Fabric items.**
+
+        This is the default for every Issue and needs no restatement. Deletion is
+        never automatic; cleanup is a human action.
 
   - type: textarea
-    id: fabric-target
+    id: existing-items-to-modify
     attributes:
-      label: Explicit Fabric target configuration
+      label: Existing Fabric items this Issue may modify
       description: |
-        Required if deployment is permitted. Name the workspace, folder and items
-        exactly. Write "None" if no Fabric access is required.
+        Leave blank unless this Issue genuinely must change something that
+        already exists. In that case **name each item explicitly** - one per
+        line. Anything not named here may not be modified.
 
-        A blank or ambiguous value here is a stop condition, not something for the
-        agent to resolve.
+        An item named here is still subject to a definition snapshot before the
+        write, so the change is reversible.
       placeholder: |
-        Environment class: feature
-        Workspace: FabricPoC-Feature
-        Folder: /Gold
-        Items in scope: nb_margin_gold, sm_sales
-      value: "None"
+        (blank = create new prefixed items only)
     validations:
-      required: true
+      required: false
 
   - type: dropdown
     id: human-clarification
@@ -160,5 +177,5 @@ body:
           required: true
         - label: I understand that only a human may merge, and that agents never merge.
           required: true
-        - label: I understand that a stable-environment change additionally requires explicit human approval.
+        - label: I understand that this Issue may create new prefixed items only, and may modify an existing item only if that item is named above.
           required: true

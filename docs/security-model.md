@@ -97,9 +97,8 @@ configuration under `config/`, referenced by an approved ticket.
 
 Two classes of environment exist:
 
-- **Feature environments** — a Developer Agent may deploy here, but only to the
-  specific workspace, folder and items named in its ticket.
-- **Stable environments** — never modified without both an approved ticket and
+- **The authorised target** — supplied by the approved local environment configuration. The agent deploys there and nowhere else.
+- **Existing Fabric items** — never modified without both an approved ticket and
   an explicit target configuration, and never deployed to without human
   approval.
 
@@ -133,7 +132,7 @@ different contexts**, defined in [`../AGENTS.md`](../AGENTS.md).
 | | Developer Agent | Reviewer Agent |
 |---|---|---|
 | Branch | assigned feature branch only | reads only |
-| Fabric | permitted feature environment only | read-only |
+| Fabric | permitted the authorised target only | read-only |
 | Developer's scratchpad | owns it | never receives it |
 | Outcome | review package | APPROVED / CHANGES REQUESTED / BLOCKED |
 | Merge | never | never |
@@ -265,7 +264,7 @@ should be enabled before the first live ticket.
 Two gates are always human, with no agent path around either:
 
 - **Merge** into `main`
-- **Deployment** to a stable environment
+- **Modification** of an existing Fabric item
 
 Agents prepare, evidence and recommend. Humans decide.
 
