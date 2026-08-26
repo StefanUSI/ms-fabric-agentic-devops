@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Notebook",
+    "displayName": "issue2_30_gold_build",
+    "description": "Issue #2 stage 30. Builds the three Gold analytical tables: daily store sales, product performance and customer-segment KPIs."
+  },
+  "config": {
+    "version": "2.0"
+  }
+}

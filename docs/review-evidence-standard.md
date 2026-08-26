@@ -221,28 +221,32 @@ finding.
 
 Verdict criteria are in [`review-standard.md`](review-standard.md).
 
-## ⚠️ Open decision 1 — reconciliation is not yet producible
+## Open decision 1 — reconciliation is now producible
 
-`reconciliation` and `smokeTests` describe evidence that **cannot currently be
-produced**, because how an agent reads a row count back is unresolved.
-Candidates: SQL analytics endpoint over ODBC with AAD auth; a DAX query against
-a semantic model; or the notebook writing its own audit row which is then read.
+`reconciliation` and `smokeTests` can be produced. The mechanism, implemented by
+Issue #2: the workload writes a machine-readable audit file to the lakehouse file
+area, and the deployment script retrieves it over the **OneLake DFS endpoint**
+with a different token audience than the one that wrote it. See
+[`agent-toolbox.md`](agent-toolbox.md) §9.
 
-Until that is settled, the loop can prove **execution** but not **correctness** —
-which is the more interesting half. This is the highest-priority open decision
-in the design; see [`environment-and-constraints.md`](environment-and-constraints.md) §8.
+`reconciliation` may be `null` **only** when the ticket explicitly requires no
+data assertion, or when no data was moved at all. It must never be `null` on a
+ticket that moved data; that is a missing-evidence finding, not an exemption.
 
-Until then, `reconciliation` may be `null` **only** when the ticket explicitly
-requires no data assertion. It must never be `null` on a ticket that moves data;
-that is a missing-evidence finding, not an exemption.
+A package reporting no runtime jobs must say so in `unsupportedClaims` rather
+than leaving the absence to be inferred.
 
 ## Current phase
 
-No evidence packages exist yet, and no development ticket has been executed.
+The target is the shared `<FABRIC_WORKSPACE>` workspace under a delegated user
+identity with no service principal. Isolation is **organizational, not
+enforced**, which is precisely why fields 17–20 are mandatory rather than
+advisory.
 
-The target is the shared `<FABRIC_WORKSPACE>` workspace, folder
-`<PREVIOUS_EXPERIMENT_FOLDER>`, under a delegated user identity with
-no service principal. Isolation is **organizational, not enforced**, which is
-precisely why fields 17–20 are mandatory rather than advisory.
+Issue #2 is the first ticket to produce an evidence package against this
+standard. It stopped at its deployment authorisation gate, so that package
+records a planned-but-not-deployed state: `jobs` is empty, `reconciliation` is
+`null`, and both facts are declared in `unsupportedClaims`.
 
-This document defines the contract the first integrated ticket must satisfy.
+That is the shape an honest blocked package takes. Expected values must never be
+written into evidence as though they had been observed.

@@ -1,0 +1,177 @@
+{
+  "properties": {
+    "description": "Issue #2 synthetic retail medallion. Strictly sequential: each stage depends on the previous one Succeeding, so a failure stops the chain rather than letting a later stage read a half-written layer. Notebook and workspace identifiers are substituted at publish time by scripts/fabric/Deploy-Issue2Medallion.ps1 from the item ids it created; nothing here is resolved by name at run time.",
+    "activities": [
+      {
+        "name": "stage_00_generate_source",
+        "description": "Writes the deterministic synthetic CSVs to Files/issue2/landing.",
+        "type": "TridentNotebook",
+        "dependsOn": [],
+        "policy": {
+          "timeout": "0.02:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookId": "{{NOTEBOOK_ID:issue2_00_generate_source}}",
+          "workspaceId": "{{WORKSPACE_ID}}",
+          "parameters": {
+            "workspace_id": {
+              "value": { "value": "@pipeline().parameters.workspace_id", "type": "Expression" },
+              "type": "string"
+            },
+            "lakehouse_id": {
+              "value": { "value": "@pipeline().parameters.lakehouse_id", "type": "Expression" },
+              "type": "string"
+            },
+            "run_token": {
+              "value": { "value": "@pipeline().parameters.run_token", "type": "Expression" },
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "stage_10_bronze_ingest",
+        "description": "Lands the CSVs into Bronze Delta tables untyped and unfiltered.",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          { "activity": "stage_00_generate_source", "dependencyConditions": ["Succeeded"] }
+        ],
+        "policy": {
+          "timeout": "0.02:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookId": "{{NOTEBOOK_ID:issue2_10_bronze_ingest}}",
+          "workspaceId": "{{WORKSPACE_ID}}",
+          "parameters": {
+            "workspace_id": {
+              "value": { "value": "@pipeline().parameters.workspace_id", "type": "Expression" },
+              "type": "string"
+            },
+            "lakehouse_id": {
+              "value": { "value": "@pipeline().parameters.lakehouse_id", "type": "Expression" },
+              "type": "string"
+            },
+            "run_token": {
+              "value": { "value": "@pipeline().parameters.run_token", "type": "Expression" },
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "stage_20_silver_transform",
+        "description": "Types, validates, quarantines and deduplicates Bronze into Silver.",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          { "activity": "stage_10_bronze_ingest", "dependencyConditions": ["Succeeded"] }
+        ],
+        "policy": {
+          "timeout": "0.02:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookId": "{{NOTEBOOK_ID:issue2_20_silver_transform}}",
+          "workspaceId": "{{WORKSPACE_ID}}",
+          "parameters": {
+            "workspace_id": {
+              "value": { "value": "@pipeline().parameters.workspace_id", "type": "Expression" },
+              "type": "string"
+            },
+            "lakehouse_id": {
+              "value": { "value": "@pipeline().parameters.lakehouse_id", "type": "Expression" },
+              "type": "string"
+            },
+            "run_token": {
+              "value": { "value": "@pipeline().parameters.run_token", "type": "Expression" },
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "stage_30_gold_build",
+        "description": "Builds the three Gold analytical tables from Silver.",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          { "activity": "stage_20_silver_transform", "dependencyConditions": ["Succeeded"] }
+        ],
+        "policy": {
+          "timeout": "0.02:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookId": "{{NOTEBOOK_ID:issue2_30_gold_build}}",
+          "workspaceId": "{{WORKSPACE_ID}}",
+          "parameters": {
+            "workspace_id": {
+              "value": { "value": "@pipeline().parameters.workspace_id", "type": "Expression" },
+              "type": "string"
+            },
+            "lakehouse_id": {
+              "value": { "value": "@pipeline().parameters.lakehouse_id", "type": "Expression" },
+              "type": "string"
+            },
+            "run_token": {
+              "value": { "value": "@pipeline().parameters.run_token", "type": "Expression" },
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "stage_90_validate",
+        "description": "Reconciles every layer against the data contract and writes the audit file to Files/issue2/evidence. Raises on any failed assertion, which is what makes a red validation surface as a failed pipeline run rather than a Succeeded one.",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          { "activity": "stage_30_gold_build", "dependencyConditions": ["Succeeded"] }
+        ],
+        "policy": {
+          "timeout": "0.02:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookId": "{{NOTEBOOK_ID:issue2_90_validate}}",
+          "workspaceId": "{{WORKSPACE_ID}}",
+          "parameters": {
+            "workspace_id": {
+              "value": { "value": "@pipeline().parameters.workspace_id", "type": "Expression" },
+              "type": "string"
+            },
+            "lakehouse_id": {
+              "value": { "value": "@pipeline().parameters.lakehouse_id", "type": "Expression" },
+              "type": "string"
+            },
+            "run_token": {
+              "value": { "value": "@pipeline().parameters.run_token", "type": "Expression" },
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "workspace_id": { "type": "string", "defaultValue": "" },
+      "lakehouse_id": { "type": "string", "defaultValue": "" },
+      "run_token": { "type": "string", "defaultValue": "" }
+    },
+    "concurrency": 1,
+    "annotations": ["issue2", "medallion", "synthetic-retail"]
+  }
+}

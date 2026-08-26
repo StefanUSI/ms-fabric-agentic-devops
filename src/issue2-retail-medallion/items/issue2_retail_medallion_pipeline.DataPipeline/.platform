@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "DataPipeline",
+    "displayName": "issue2_retail_medallion_pipeline",
+    "description": "Issue #2 orchestration. Runs stages 00 generate, 10 bronze, 20 silver, 30 gold and 90 validate in strict sequence, each depending on the previous stage succeeding."
+  },
+  "config": {
+    "version": "2.0"
+  }
+}

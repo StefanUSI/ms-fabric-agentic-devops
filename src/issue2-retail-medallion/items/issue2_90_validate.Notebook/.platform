@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Notebook",
+    "displayName": "issue2_90_validate",
+    "description": "Issue #2 stage 90. Reconciles every layer against the data contract, asserts row conservation, primary keys, three-way financial agreement and idempotency, and writes the audit file retrieved independently over OneLake DFS."
+  },
+  "config": {
+    "version": "2.0"
+  }
+}

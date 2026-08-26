@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Lakehouse",
+    "displayName": "issue2_retail_lakehouse",
+    "description": "Issue #2 synthetic retail medallion. Bronze, Silver and Gold Delta tables plus the generated CSV landing area. Created by the Agentic DevOps developer agent."
+  },
+  "config": {
+    "version": "2.0"
+  }
+}

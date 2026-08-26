@@ -3,8 +3,17 @@
 The deterministic commands the developer agent calls instead of re-deriving
 Microsoft Fabric API sequences each session.
 
-**Status: specified, not implemented.** This document is the contract. None of
-these commands exist yet.
+**Status: partially implemented.** This document remains the contract.
+
+Issue #2 implemented commands 2, 3, 4, 5, 6, 7, 8 and 10 as functions in
+[`scripts/fabric/FabricToolbox.ps1`](../scripts/fabric/FabricToolbox.ps1),
+sequenced by `scripts/fabric/Deploy-Issue2Medallion.ps1`. Command 1 is inlined in
+that script rather than generalised. Command 9 is implemented in the
+ticket-specific form described under §9 below.
+
+They are implemented but **not yet exercised against a live tenant**: Issue #2
+stopped at its deployment authorisation gate. Treat the API-shape assumptions as
+unverified until a Live run confirms them.
 
 **Scope: Level 1.** This set targets the verified environment in
 [`environment-and-constraints.md`](environment-and-constraints.md) — a shared `<FABRIC_WORKSPACE>` workspace,
@@ -205,15 +214,20 @@ Sets pipeline concurrency to 1 and refuses to start if another job is running.
 | **Evidence** | `reconciliation` |
 | **Rollback** | Not applicable. |
 
-> ### ⚠️ Open decision 1 — this command is not yet implementable
+> ### Open decision 1 — resolved by Issue #2
 >
-> How the agent reads a row count back is **unresolved**. Candidates: the SQL
-> analytics endpoint over ODBC with AAD auth; a DAX query against a semantic
-> model; or the notebook writing its own audit row which is then read.
+> How the agent reads a row count back is **settled**. The workload writes a
+> machine-readable audit file to the lakehouse file area; the deployment script
+> retrieves it over the **OneLake DFS endpoint** with the `storage.azure.com`
+> token audience. No ODBC driver and no semantic model are required.
 >
-> Until this is settled, `review-evidence-standard.md` describes evidence that
-> cannot be produced, and the loop cannot prove correctness — only execution.
-> **This is the highest-priority decision in the design.**
+> The different endpoint and different token audience are the substance of it.
+> Evidence retrieved through the same component that produced it demonstrates
+> only that the component is self-consistent.
+>
+> Implemented as `Get-OneLakeFile` and `Test-Issue2AuditFile`. The generic,
+> ticket-independent `Test-FabricTableResult` in this contract is still
+> unimplemented; Issue #2 built the ticket-specific form.
 
 ## 10. `New-ReversalPlan`
 

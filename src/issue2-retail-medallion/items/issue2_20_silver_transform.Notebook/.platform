@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Notebook",
+    "displayName": "issue2_20_silver_transform",
+    "description": "Issue #2 stage 20. Types, validates, quarantines and deduplicates Bronze into the Silver fact and dimensions."
+  },
+  "config": {
+    "version": "2.0"
+  }
+}

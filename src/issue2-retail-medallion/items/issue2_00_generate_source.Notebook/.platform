@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Notebook",
+    "displayName": "issue2_00_generate_source",
+    "description": "Issue #2 stage 00. Generates the synthetic retail source CSVs into Files/issue2/landing. Deterministic integer arithmetic, no RNG."
+  },
+  "config": {
+    "version": "2.0"
+  }
+}
