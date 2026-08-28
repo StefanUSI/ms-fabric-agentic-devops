@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Notebook",
+    "displayName": "issue2_10_bronze_ingest",
+    "description": "Issue #2 stage 10. Lands the CSVs into Bronze Delta tables as-is, untyped and unfiltered."
+  },
+  "config": {
+    "version": "2.0"
+  }
+}

@@ -1,0 +1,144 @@
+{
+  "$comment": [
+    "Deployment allowlist for GitHub Issue #2.",
+    "",
+    "Nothing outside this file may be created, written to or modified in",
+    "Microsoft Fabric by this ticket. Test-DeploymentAllowlist.ps1 refuses any",
+    "target absent from it, and Compare-FabricFolderInventory.ps1 rejects any",
+    "post-deployment item that is not declared here.",
+    "",
+    "WHY DATA PATHS ARE HALF OF THIS FILE:",
+    "Items live in folders. Lakehouse tables DO NOT. The target folder is an",
+    "organisational label, not a boundary - see docs/environment-and-constraints.md.",
+    "An item-only allowlist would therefore come back perfectly clean while",
+    "someone else's Gold tables were being overwritten. The dataPaths section",
+    "is the half that covers the damage the item section cannot see.",
+    "",
+    "Workspace and folder identifiers are deliberately ABSENT. They live in the",
+    "gitignored config/environment.local.json because this repository is public.",
+    "This file names WHAT may be touched; the local config names WHERE."
+  ],
+
+  "schemaVersion": 1,
+  "ticketId": "2",
+  "ticketUrl": "https://github.com/StefanUSI/ms-fabric-agentic-devops/issues/2",
+
+  "$comment_environmentClass": [
+    "DEPRECATED and retained only so evidence validates against the schema. An",
+    "earlier draft of this file recorded 'stable', which contradicted the Issue:",
+    "Issue #2 states 'feature (logically isolated, NOT permission-isolated)'.",
+    "Corrected to match the ticket.",
+    "",
+    "The correction changes no control. The feature/stable distinction was",
+    "removed from this repository precisely because it produced ambiguity",
+    "without adding a control - see CLAUDE.md rule 5. The real protections are",
+    "the target reference, the create-only default and the named-item exception,",
+    "and none of them reads this field."
+  ],
+  "environmentClass": "feature",
+  "requiredItemPrefix": "issue2_",
+
+  "$comment_target": [
+    "The workspace and folder come from config/environment.local.json only.",
+    "",
+    "requiresExplicitHumanApproval stays true, but NOT because of an environment",
+    "class. It is true because deployment requires TWO independent things:",
+    "  1. the Issue authorising Fabric deployment - Issue #2 does; and",
+    "  2. a human binding this local target to THIS ticket, by setting",
+    "     fabric.authorisedForTicket to \"2\" in config/environment.local.json.",
+    "",
+    "An agent may prepare, plan and evidence the deployment. It may not set that",
+    "field. An agent that set its own authorisation flag would be opening its own",
+    "gate, which CLAUDE.md rule 12 forbids as plainly as it forbids any other",
+    "way of weakening a control to finish a ticket."
+  ],
+  "target": {
+    "workspaceFrom": "config/environment.local.json :: fabric.workspaceId",
+    "folderFrom": "config/environment.local.json :: fabric.authorisedTargetFolderId",
+    "requiresExplicitHumanApproval": true,
+    "approvalRecordedAt": "config/environment.local.json :: fabric.authorisedForTicket",
+    "approvalExpectedValue": "2"
+  },
+
+  "$comment_items": [
+    "createOnly means the deployment script refuses to proceed if the item",
+    "already exists with a different definition, rather than overwriting it.",
+    "CLAUDE.md forbids overwriting an existing Fabric item; the prefix is what",
+    "makes a pre-existing collision unlikely, and the createOnly check is what",
+    "catches it when it happens anyway."
+  ],
+  "items": [
+    { "name": "issue2_retail_lakehouse",           "itemType": "Lakehouse",    "operation": "create", "createOnly": true },
+    { "name": "issue2_00_generate_source",         "itemType": "Notebook",     "operation": "create", "createOnly": true },
+    { "name": "issue2_10_bronze_ingest",           "itemType": "Notebook",     "operation": "create", "createOnly": true },
+    { "name": "issue2_20_silver_transform",        "itemType": "Notebook",     "operation": "create", "createOnly": true },
+    { "name": "issue2_30_gold_build",              "itemType": "Notebook",     "operation": "create", "createOnly": true },
+    { "name": "issue2_90_validate",                "itemType": "Notebook",     "operation": "create", "createOnly": true },
+    { "name": "issue2_retail_medallion_pipeline",  "itemType": "DataPipeline", "operation": "create", "createOnly": true }
+  ],
+
+  "$comment_companions": [
+    "Fabric creates these automatically when a Lakehouse is created. They are",
+    "NOT deployed by this ticket and NOT authored in src/, but they will appear",
+    "in the post-deployment inventory diff.",
+    "",
+    "They are declared here so the diff can distinguish 'a documented platform",
+    "side effect' from 'an undeclared change', which is the distinction the",
+    "diff exists to make. Declaring them is not the same as claiming this",
+    "ticket created them - the 'createdBy' field records that honestly.",
+    "",
+    "Note that the SQL analytics endpoint and the default semantic model share",
+    "the Lakehouse DISPLAY NAME. That is exactly why the inventory diff keys on",
+    "name AND type: on name alone these three collapse into one entry and two",
+    "real items become invisible."
+  ],
+  "expectedAutoGeneratedCompanions": [
+    { "name": "issue2_retail_lakehouse", "itemType": "SQLEndpoint",    "createdBy": "Fabric platform", "trigger": "Lakehouse creation" },
+    { "name": "issue2_retail_lakehouse", "itemType": "SemanticModel",  "createdBy": "Fabric platform", "trigger": "Lakehouse creation (default semantic model)" }
+  ],
+
+  "$comment_dataPaths": [
+    "All paths are relative to the issue2_retail_lakehouse OneLake root and are",
+    "scoped to this ticket by the issue2 path segment or the issue2_ table",
+    "prefix. No path outside issue2_retail_lakehouse is declared, which means",
+    "no path outside it may be written.",
+    "",
+    "Every write is a full overwrite of a ticket-owned path from deterministic",
+    "source data. There is no append and no in-place mutation of anything this",
+    "ticket did not create, which is what makes a re-run produce the same",
+    "result rather than a doubled one."
+  ],
+  "dataPaths": [
+    { "path": "issue2_retail_lakehouse/Files/issue2/landing/**",              "access": "write", "purpose": "Generated synthetic source files (CSV)." },
+    { "path": "issue2_retail_lakehouse/Files/issue2/evidence/**",             "access": "write", "purpose": "Validation audit file written by the run and read back independently over the OneLake DFS endpoint." },
+    { "path": "issue2_retail_lakehouse/Tables/issue2_bronze_sales",           "access": "write", "purpose": "Bronze - raw sales lines, untyped." },
+    { "path": "issue2_retail_lakehouse/Tables/issue2_bronze_stores",          "access": "write", "purpose": "Bronze - raw stores." },
+    { "path": "issue2_retail_lakehouse/Tables/issue2_bronze_products",        "access": "write", "purpose": "Bronze - raw products." },
+    { "path": "issue2_retail_lakehouse/Tables/issue2_bronze_customers",       "access": "write", "purpose": "Bronze - raw customers." },
+    { "path": "issue2_retail_lakehouse/Tables/issue2_silver_sales",           "access": "write", "purpose": "Silver - typed, validated, deduplicated sales." },
+    { "path": "issue2_retail_lakehouse/Tables/issue2_silver_quarantine_sales","access": "write", "purpose": "Silver - rejected rows with reject reason." },
+    { "path": "issue2_retail_lakehouse/Tables/issue2_silver_dim_store",       "access": "write", "purpose": "Silver - store dimension." },
+    { "path": "issue2_retail_lakehouse/Tables/issue2_silver_dim_product",     "access": "write", "purpose": "Silver - product dimension." },
+    { "path": "issue2_retail_lakehouse/Tables/issue2_silver_dim_customer",    "access": "write", "purpose": "Silver - customer dimension." },
+    { "path": "issue2_retail_lakehouse/Tables/issue2_gold_daily_store_sales", "access": "write", "purpose": "Gold - daily sales by store." },
+    { "path": "issue2_retail_lakehouse/Tables/issue2_gold_product_performance","access": "write","purpose": "Gold - product performance and margin." },
+    { "path": "issue2_retail_lakehouse/Tables/issue2_gold_customer_segment_kpi","access": "write","purpose": "Gold - KPIs by customer segment." }
+  ],
+
+  "$comment_prohibited": [
+    "Restating the standing rules at the point of use. These are not new",
+    "constraints; they are the ones most likely to be reached for while trying",
+    "to make this specific ticket finish."
+  ],
+  "prohibited": [
+    "Creating, modifying, renaming or deleting any Fabric item not listed in 'items'.",
+    "Writing to any data path not listed in 'dataPaths'.",
+    "Deleting or overwriting an item that existed before this ticket.",
+    "Creating a workspace, folder or service principal.",
+    "Deploying an item whose display name lacks the issue2_ prefix.",
+    "Running more than one Fabric job concurrently.",
+    "Deploying at all while fabric.authorisedForTicket is not \"2\"."
+  ],
+
+  "iterationCeiling": 3
+}

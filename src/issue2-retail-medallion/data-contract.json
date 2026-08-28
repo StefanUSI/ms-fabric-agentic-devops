@@ -1,0 +1,142 @@
+{
+  "$comment": [
+    "Synthetic retail data contract for GitHub Issue #2.",
+    "",
+    "THIS FILE IS THE SOURCE OF EVERY EXPECTED VALUE. It is read by the",
+    "generator notebook (to produce the data) and independently by the",
+    "validation notebook and tests/issue2-validation.tests.ps1 (to assert the",
+    "result). Expected values are therefore declared BEFORE the run, in the",
+    "repository, and are never derived from the run under test.",
+    "",
+    "docs/review-evidence-standard.md: 'Expected values come from the ticket,",
+    "never derived from the run under test - self-derived expectations make",
+    "every run pass.'",
+    "",
+    "The generation is pure integer arithmetic with no random number generator,",
+    "so the same contract always produces byte-identical source data. That is",
+    "what makes the second-run idempotency assertion meaningful.",
+    "",
+    "Contains no real Fabric, tenant or user identifier. Safe for a public repo."
+  ],
+
+  "schemaVersion": 1,
+  "ticketId": "2",
+  "itemPrefix": "issue2_",
+
+  "generation": {
+    "startDate": "2025-01-01",
+    "days": 90,
+    "storeCount": 8,
+    "productCount": 40,
+    "customerCount": 300,
+    "segmentCount": 4,
+    "linesPerStoreDay": 7,
+
+    "$comment_defects": [
+      "Each defect row is built from a clean template and mutates EXACTLY ONE",
+      "field, so the reject categories are mutually exclusive and the expected",
+      "quarantine breakdown below is exact rather than approximate.",
+      "Duplicate rows are byte-copies of valid lines: they pass every quality",
+      "rule and must be removed by deduplication, not by quarantine. That is",
+      "deliberate - it separates 'rejected because bad' from 'removed because",
+      "repeated', which are different failures with different fixes."
+    ],
+    "injectedDefects": {
+      "duplicateLines": 60,
+      "nonPositiveQuantity": 25,
+      "nullProductId": 15,
+      "orphanStoreId": 20,
+      "nonPositivePrice": 10
+    },
+    "orphanStoreIdValue": 999
+  },
+
+  "expected": {
+    "$comment": "Every number below is arithmetic from 'generation' above and is asserted at runtime.",
+
+    "sourceCleanSalesLines": 5040,
+    "sourceInjectedDefectLines": 130,
+    "sourceTotalSalesLines": 5170,
+
+    "bronze": {
+      "issue2_bronze_sales": 5170,
+      "issue2_bronze_stores": 8,
+      "issue2_bronze_products": 40,
+      "issue2_bronze_customers": 300
+    },
+
+    "silver": {
+      "issue2_silver_sales": 5040,
+      "issue2_silver_quarantine_sales": 70,
+      "issue2_silver_dim_store": 8,
+      "issue2_silver_dim_product": 40,
+      "issue2_silver_dim_customer": 300
+    },
+
+    "$comment_quarantineByReason": [
+      "orphan_product and invalid_discount are expected to be 0. They are listed",
+      "explicitly rather than omitted: 0 asserts that the rule ran and matched",
+      "nothing, whereas omission would leave a rule that never executes",
+      "indistinguishable from one that executed cleanly."
+    ],
+    "quarantineByReason": {
+      "null_natural_key": 15,
+      "non_positive_quantity": 25,
+      "non_positive_price": 10,
+      "orphan_store": 20,
+      "orphan_product": 0,
+      "invalid_discount": 0
+    },
+
+    "duplicatesRemoved": 60,
+
+    "gold": {
+      "issue2_gold_daily_store_sales": 720,
+      "issue2_gold_product_performance": 40,
+      "issue2_gold_customer_segment_kpi": 4
+    },
+
+    "$comment_rowConservation": [
+      "bronze_sales = silver_sales + quarantine + duplicates_removed.",
+      "5170 = 5040 + 70 + 60. Every source row is accounted for exactly once;",
+      "no row is silently dropped. This identity is computed from three",
+      "independently written tables, so it cannot be satisfied by a bug that",
+      "affects them all in the same direction."
+    ],
+    "rowConservation": {
+      "bronzeSales": 5170,
+      "silverSales": 5040,
+      "quarantine": 70,
+      "duplicatesRemoved": 60
+    },
+
+    "$comment_financial": [
+      "net_amount = quantity * unit_price * (1 - discount_pct).",
+      "The same measure is aggregated three independent ways - once in silver,",
+      "once by (date, store) and once by product. All three must agree to",
+      "within the tolerance below. Rounding at cent scale over ~5k rows is the",
+      "only legitimate source of difference."
+    ],
+    "financialToleranceAbsolute": 0.01,
+
+    "primaryKeys": {
+      "issue2_silver_sales": ["transaction_id", "line_number"],
+      "issue2_silver_dim_store": ["store_id"],
+      "issue2_silver_dim_product": ["product_id"],
+      "issue2_silver_dim_customer": ["customer_id"],
+      "issue2_gold_daily_store_sales": ["sales_date", "store_id"],
+      "issue2_gold_product_performance": ["product_id"],
+      "issue2_gold_customer_segment_kpi": ["segment"]
+    }
+  },
+
+  "dataQualityRules": [
+    { "id": "null_natural_key",     "severity": "reject", "description": "transaction_id, line_number or product_id is null or unparseable." },
+    { "id": "non_positive_quantity","severity": "reject", "description": "quantity is null or <= 0. A sale of zero or fewer units is not a sale." },
+    { "id": "non_positive_price",   "severity": "reject", "description": "unit_price is null or <= 0." },
+    { "id": "orphan_store",         "severity": "reject", "description": "store_id has no matching row in the store dimension." },
+    { "id": "orphan_product",       "severity": "reject", "description": "product_id has no matching row in the product dimension." },
+    { "id": "invalid_discount",     "severity": "reject", "description": "discount_pct is null, negative, or greater than 0.9." },
+    { "id": "duplicate_line",       "severity": "dedupe", "description": "Repeated (transaction_id, line_number). Kept once, deterministically by lowest source_row_id." }
+  ]
+}

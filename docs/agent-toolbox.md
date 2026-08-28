@@ -3,8 +3,48 @@
 The deterministic commands the developer agent calls instead of re-deriving
 Microsoft Fabric API sequences each session.
 
-**Status: specified, not implemented.** This document is the contract. None of
-these commands exist yet.
+**Status: partially implemented.** This document remains the contract.
+
+Issue #2 implemented commands 2, 3, 4, 5, 6, 7, 8 and 10 as functions in
+[`scripts/fabric/FabricToolbox.ps1`](../scripts/fabric/FabricToolbox.ps1),
+sequenced by `scripts/fabric/Deploy-Issue2Medallion.ps1`. Command 1 is inlined in
+that script rather than generalised. Command 9 is implemented in the
+ticket-specific form described under §9 below.
+
+They have now been **exercised against a live tenant**. Issue #2 deployed seven
+items and ran its pipeline, so the API-shape assumptions are no longer
+theoretical.
+
+The first Live run found the most important thing the contract had wrong.
+
+### The 202 that was never polled
+
+`Invoke-FabricRest` looked for the long-running-operation URI in an
+`Operation-Location` header. Fabric returns it in **`Location`** for item create
+and `getDefinition`. The lookup missed it, fell through, and parsed the response
+body instead — which for those calls is the literal JSON `null`.
+`ConvertFrom-Json` turns that into `$null`, the same value the function returns
+on failure.
+
+The consequence is worth stating plainly, because it is the exact failure this
+whole repository is built to prevent: **a notebook that Fabric created
+successfully was recorded as a failed deployment, the operation was never polled
+to a terminal state, and the script exited with no error message at all.**
+"Acceptance is not verification" was the rule; the implementation had quietly
+stopped honouring it.
+
+What changed:
+
+| Before | After |
+|---|---|
+| Only `Operation-Location`, case-sensitive | Either `Operation-Location` or `Location`, case-insensitive, array-unwrapping |
+| A 202 with no recognised header fell through to the body | A 202 with no pollable operation URI is a **loud failure** |
+| `$null` meant "failed" *or* "succeeded with a null body" | `$null` means failed, and nothing else |
+| Existence read back after deploy | Existence **and every definition part** read back |
+
+Pinned by nine offline regression tests, including one that asserts the broken
+pipeline idiom really does mis-count, so the corrected form cannot be mistaken
+for a pointless refactor.
 
 **Scope: Level 1.** This set targets the verified environment in
 [`environment-and-constraints.md`](environment-and-constraints.md) — a shared `<FABRIC_WORKSPACE>` workspace,
@@ -161,6 +201,30 @@ needed to prove the *integration*.
 Refuses if: the display name lacks the `issue<N>_` prefix; the target is not on
 the allowlist; or the item exists and no snapshot was taken.
 
+### Resuming an interrupted deployment
+
+A deployment that fails halfway leaves items the ticket itself created. The
+create-only guard would then refuse them on the next attempt, and the only way
+forward would be deletion — which is a human action and is never automatic. So a
+partial failure would strand the ticket permanently.
+
+`-ResumePartial` resolves that, and the decision is made from **data rather than
+intent**. `-PreDeploymentKeys` carries the `type/name` keys present in the target
+folder before this ticket wrote anything:
+
+| Item exists, and its key is… | Treated as | Behaviour |
+|---|---|---|
+| **in** the pre-deployment baseline | somebody else's item | refused, exactly as before, unless `-AllowUpdate` **and** a snapshot |
+| **not in** the baseline | this ticket's own interrupted create | definition converged under `-ResumePartial` |
+
+The baseline is captured **once per ticket and persisted**. A resumed run must
+compare against the state before the ticket's first write, never against the
+state its own failed run left behind — otherwise the items it created would look
+pre-existing and be refused forever.
+
+Resume is opt-in and off by default. It cannot reach a pre-existing item, and it
+never deletes anything.
+
 ## 7. `Invoke-FabricPipeline`
 
 | | |
@@ -205,15 +269,20 @@ Sets pipeline concurrency to 1 and refuses to start if another job is running.
 | **Evidence** | `reconciliation` |
 | **Rollback** | Not applicable. |
 
-> ### ⚠️ Open decision 1 — this command is not yet implementable
+> ### Open decision 1 — resolved by Issue #2
 >
-> How the agent reads a row count back is **unresolved**. Candidates: the SQL
-> analytics endpoint over ODBC with AAD auth; a DAX query against a semantic
-> model; or the notebook writing its own audit row which is then read.
+> How the agent reads a row count back is **settled**. The workload writes a
+> machine-readable audit file to the lakehouse file area; the deployment script
+> retrieves it over the **OneLake DFS endpoint** with the `storage.azure.com`
+> token audience. No ODBC driver and no semantic model are required.
 >
-> Until this is settled, `review-evidence-standard.md` describes evidence that
-> cannot be produced, and the loop cannot prove correctness — only execution.
-> **This is the highest-priority decision in the design.**
+> The different endpoint and different token audience are the substance of it.
+> Evidence retrieved through the same component that produced it demonstrates
+> only that the component is self-consistent.
+>
+> Implemented as `Get-OneLakeFile` and `Test-Issue2AuditFile`. The generic,
+> ticket-independent `Test-FabricTableResult` in this contract is still
+> unimplemented; Issue #2 built the ticket-specific form.
 
 ## 10. `New-ReversalPlan`
 
