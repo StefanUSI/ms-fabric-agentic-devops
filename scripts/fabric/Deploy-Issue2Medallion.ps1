@@ -43,6 +43,11 @@ param(
     [ValidateSet('Plan', 'Live')]
     [string]$Mode = 'Plan',
 
+    # Converge items that a PREVIOUS run of this ticket created before failing.
+    # Off by default. It can only affect items absent from the persisted
+    # pre-deployment baseline, so it can never touch a pre-existing item.
+    [switch]$Resume,
+
     [string]$TicketId = '2',
     [string]$ConfigPath = 'config/environment.local.json',
     [string]$AllowlistPath = 'config/issue2-allowlist.json',
@@ -159,15 +164,49 @@ if (-not (Test-Path -LiteralPath $RawEvidenceRoot)) {
     New-Item -ItemType Directory -Force -Path $RawEvidenceRoot | Out-Null
 }
 
+# The baseline is captured ONCE per ticket and then persisted. A resumed run
+# must compare against the state before this ticket wrote anything, not against
+# the state its own interrupted run left behind -- otherwise the items it
+# created would look pre-existing and the create-only guard would refuse them
+# forever.
+$baselinePath = Join-Path $RawEvidenceRoot 'inventory-baseline.json'
 $inventoryBefore = @()
+$preDeploymentKeys = @()
+
 if ($Mode -eq 'Live') {
-    $inventoryBefore = Get-FabricFolderInventory -WorkspaceId $workspaceId -FolderId $folderId `
-        -OutputPath (Join-Path $RawEvidenceRoot 'inventory-before.json')
-    if ($null -eq $inventoryBefore) {
-        Add-RunError -Phase 'deployment' -Message 'Baseline inventory could not be captured.'
-        exit $script:F_EXIT_API
+    if (Test-Path -LiteralPath $baselinePath) {
+        $existingBaseline = Get-Content -LiteralPath $baselinePath -Raw
+        $inventoryBefore = @()
+        if (-not [string]::IsNullOrWhiteSpace($existingBaseline)) {
+            # Assigned first, then enumerated. ConvertFrom-Json writes an empty
+            # array to the pipeline as ONE object rather than enumerating it, so
+            # piping its output straight into Where-Object yields a single item
+            # that IS the empty array -- a baseline of "1 item" with no
+            # properties, which is what broke the first resume attempt.
+            # Assigning to a variable and then piping forces enumeration.
+            # An empty baseline is the ordinary state for a fresh target folder.
+            $parsedBaseline = $existingBaseline | ConvertFrom-Json
+            if ($null -ne $parsedBaseline) {
+                $inventoryBefore = @($parsedBaseline | Where-Object { $null -ne $_ })
+            }
+        }
+        Write-FOk "using the persisted pre-deployment baseline: $($inventoryBefore.Count) item(s)"
+        Write-FInfo "baseline file: $baselinePath (captured before this ticket's first write)"
+    } else {
+        $inventoryBefore = Get-FabricFolderInventory -WorkspaceId $workspaceId -FolderId $folderId `
+            -OutputPath $baselinePath
+        if ($null -eq $inventoryBefore) {
+            Add-RunError -Phase 'deployment' -Message 'Baseline inventory could not be captured.'
+            exit $script:F_EXIT_API
+        }
+        Write-FOk "$($inventoryBefore.Count) item(s) in the target folder before deployment"
     }
-    Write-FOk "$($inventoryBefore.Count) item(s) in the target folder before deployment"
+    $preDeploymentKeys = @($inventoryBefore | ForEach-Object { "$($_.itemType)/$($_.itemName)" })
+
+    if ($Resume) {
+        Write-FWarn 'Resume is ON: items absent from the baseline above will be converged.'
+        Write-FWarn 'Items present in the baseline remain create-only and are still refused.'
+    }
 } else {
     Write-FDryRun 'baseline inventory (skipped in Plan mode; requires Fabric read)'
 }
@@ -197,7 +236,8 @@ $lakehousePlatform = Get-Content -LiteralPath (Join-Path $SourceRoot "items/$lak
 $lakehouse = Publish-FabricItemDefinition -WorkspaceId $workspaceId -FolderId $folderId `
     -DisplayName $lakehouseName -ItemType 'Lakehouse' `
     -Description $lakehousePlatform.metadata.description `
-    -Parts @() -RequiredPrefix $prefix -WhatIf:$whatIf
+    -Parts @() -RequiredPrefix $prefix `
+    -PreDeploymentKeys $preDeploymentKeys -ResumePartial:$Resume -WhatIf:$whatIf
 if ($null -eq $lakehouse) {
     Add-RunError -Phase 'deployment' -Message "Lakehouse '$lakehouseName' was not created and verified."
     exit $script:F_EXIT_VERIFY
@@ -243,7 +283,8 @@ foreach ($name in $notebookNames) {
 
     $result = Publish-FabricItemDefinition -WorkspaceId $workspaceId -FolderId $folderId `
         -DisplayName $name -ItemType 'Notebook' -Description $platform.metadata.description `
-        -Parts $parts -RequiredPrefix $prefix -WhatIf:$whatIf
+        -Parts $parts -RequiredPrefix $prefix `
+        -PreDeploymentKeys $preDeploymentKeys -ResumePartial:$Resume -WhatIf:$whatIf
     if ($null -eq $result) {
         Add-RunError -Phase 'deployment' -Message "Notebook '$name' was not created and verified."
         exit $script:F_EXIT_VERIFY
@@ -283,7 +324,8 @@ $pipelineParts = @(
 $pipeline = Publish-FabricItemDefinition -WorkspaceId $workspaceId -FolderId $folderId `
     -DisplayName $pipelineName -ItemType 'DataPipeline' `
     -Description $pipelinePlatform.metadata.description `
-    -Parts $pipelineParts -RequiredPrefix $prefix -WhatIf:$whatIf
+    -Parts $pipelineParts -RequiredPrefix $prefix `
+    -PreDeploymentKeys $preDeploymentKeys -ResumePartial:$Resume -WhatIf:$whatIf
 if ($null -eq $pipeline) {
     Add-RunError -Phase 'deployment' -Message "Pipeline '$pipelineName' was not created and verified."
     exit $script:F_EXIT_VERIFY

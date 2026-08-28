@@ -26,7 +26,15 @@ param(
     [string]$RawEvidenceRoot = 'runtime/issue2',
     [string]$EvidenceOutput = 'reviews/2/evidence.json',
     [string]$AllowlistPath = 'config/issue2-allowlist.json',
-    [string]$RepositoryUrl = 'https://github.com/StefanUSI/ms-fabric-agentic-devops'
+    [string]$RepositoryUrl = 'https://github.com/StefanUSI/ms-fabric-agentic-devops',
+
+    # Errors, recovery actions, human interventions and unsupported claims are
+    # narrative: they cannot be derived from a run, and hand-editing them into
+    # the generated JSON afterwards would make the package unreproducible and
+    # indistinguishable from a fabricated one. They live in a committed file that
+    # is reviewed alongside the evidence and folded in here.
+    [string]$NarrativePath = 'reviews/2/narrative.json',
+    [string]$BaseBranch = 'main'
 )
 
 Set-StrictMode -Version Latest
@@ -47,6 +55,61 @@ if ($null -eq $allowlist) { exit $script:F_EXIT_CONFIG }
 
 $branch = (& git rev-parse --abbrev-ref HEAD 2>$null)
 $commitSha = (& git rev-parse HEAD 2>$null)
+
+# --- Narrative -----------------------------------------------------------------
+$narrative = $null
+if (Test-Path -LiteralPath $NarrativePath) {
+    try {
+        $narrative = Get-Content -LiteralPath $NarrativePath -Raw | ConvertFrom-Json
+    } catch {
+        Write-FErr "Narrative file is not valid JSON: $NarrativePath"
+        exit $script:F_EXIT_CONFIG
+    }
+} else {
+    Write-FErr "Narrative file not found: $NarrativePath"
+    Write-FErr 'Refusing to emit a package with empty errors and unsupportedClaims.'
+    Write-FErr 'An empty errors list must be a statement, not an omission.'
+    exit $script:F_EXIT_CONFIG
+}
+
+function Get-NarrativeArray {
+    param([string]$Name)
+    if ($narrative.PSObject.Properties.Name -contains $Name) {
+        $v = $narrative.$Name
+        if ($null -eq $v) { return @() }
+        return @($v)
+    }
+    return @()
+}
+
+# --- Changed artifacts, derived from Git rather than hand-listed ---------------
+$changed = @()
+$nameStatus = @(& git diff --name-status "$BaseBranch...HEAD" 2>$null)
+foreach ($line in $nameStatus) {
+    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+    $cols = $line -split "`t"
+    if ($cols.Count -lt 2) { continue }
+    $change = switch ($cols[0].Substring(0, 1)) {
+        'A' { 'added' }
+        'M' { 'modified' }
+        'D' { 'removed' }
+        'R' { 'renamed' }
+        default { 'changed' }
+    }
+    $path = $cols[-1]
+    $type = switch -Regex ($path) {
+        '\.Notebook/'     { 'notebook' }
+        '\.DataPipeline/' { 'pipeline' }
+        '\.Lakehouse/'    { 'lakehouse' }
+        '^tests/'         { 'test' }
+        '^scripts/'       { 'script' }
+        '^docs/'          { 'documentation' }
+        '^config/'        { 'configuration' }
+        '^reviews/'       { 'evidence' }
+        default           { 'other' }
+    }
+    $changed += [ordered]@{ path = $path; type = $type; change = $change }
+}
 
 # --- Redaction map -----------------------------------------------------------
 # Built from the identifiers actually present in this run rather than from a
@@ -148,6 +211,20 @@ foreach ($p in $audit1.primaryKeys.PSObject.Properties) {
     }
 }
 
+# --- Inventory diff ----------------------------------------------------------
+# Recomputed from the two captured inventories with the same function the
+# deployment used, so a reviewer can reproduce it from the committed
+# inventoryBefore/inventoryAfter blocks. Its entries are "type/name" keys and
+# carry no GUID.
+$inventoryDiff = Compare-FabricFolderInventory `
+    -Baseline @($raw.inventoryBefore) -Current @($raw.inventoryAfter) -Allowlist $allowlist
+
+if ($inventoryDiff.undeclaredChanges.Count -gt 0) {
+    Write-FErr "Refusing to write evidence: $($inventoryDiff.undeclaredChanges.Count) undeclared inventory change(s)."
+    foreach ($u in $inventoryDiff.undeclaredChanges) { Write-FErr "  UNDECLARED: $u" }
+    exit $script:F_EXIT_UNDECLARED
+}
+
 $evidence = [ordered]@{
     schemaVersion = 1
     ticketId      = $TicketId
@@ -168,7 +245,7 @@ $evidence = [ordered]@{
         identifiersInferred    = $false
     }
 
-    changedArtifacts = @()   # filled by the caller from the Git diff
+    changedArtifacts = $changed
 
     jobs = $jobs
 
@@ -185,10 +262,10 @@ $evidence = [ordered]@{
     reportValidation  = $null
     ontologyValidation = $null
 
-    errors          = @()
-    recoveryActions = @()
-    humanInterventions = @()
-    unsupportedClaims  = @()
+    errors             = (Get-NarrativeArray 'errors')
+    recoveryActions    = (Get-NarrativeArray 'recoveryActions')
+    humanInterventions = (Get-NarrativeArray 'humanInterventions')
+    unsupportedClaims  = (Get-NarrativeArray 'unsupportedClaims')
 
     rollback = [ordered]@{
         repository = @(
@@ -221,12 +298,12 @@ $evidence = [ordered]@{
     inventoryBefore = (ConvertTo-InventoryEntries $raw.inventoryBefore)
     inventoryAfter  = (ConvertTo-InventoryEntries $raw.inventoryAfter)
 
-    inventoryDiff = [ordered]@{
-        added             = @()
-        modified          = @()
-        removed           = @()
-        undeclaredChanges = @()
-    }
+    # Recomputed here from the captured inventories rather than copied from the
+    # deployment run, so the committed diff is reproducible by a reviewer from
+    # the two inventory blocks above using the same function the deployment used.
+    # Hardcoding empty arrays would record "nothing was added" on a run that
+    # added seven items -- a false record, not a terse one.
+    inventoryDiff = $inventoryDiff
 
     snapshots = @()
 
@@ -266,5 +343,7 @@ if ($dir -and -not (Test-Path -LiteralPath $dir)) {
 $json | Out-File -LiteralPath $EvidenceOutput -Encoding utf8
 
 Write-FOk "sanitized evidence written: $EvidenceOutput"
-Write-FInfo 'Fill changedArtifacts, errors, humanInterventions and unsupportedClaims before committing.'
+Write-FInfo "changedArtifacts derived from git diff $BaseBranch...HEAD; errors, recoveryActions,"
+Write-FInfo "humanInterventions and unsupportedClaims folded in from $NarrativePath."
+Write-FInfo 'Nothing in the output is hand-edited. Re-running this script reproduces it.'
 exit $script:F_EXIT_OK

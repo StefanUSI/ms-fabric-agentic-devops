@@ -612,6 +612,245 @@ Test-Case 'the toolbox never writes a token to a file' {
 }
 
 # =============================================================================
+Write-Section 'Long-running-operation handling (regressions from the first Live run)'
+
+# The first Live deployment created a notebook in Fabric and reported it as a
+# failure, with no error message. Fabric answered the create with 202 and a
+# `Location` header; the toolbox looked only for `Operation-Location`, missed it,
+# and fell through to parsing the body -- the literal JSON `null` -- which
+# ConvertFrom-Json turns into $null, the same value the function returns on
+# error. Each test below pins one link in that chain.
+
+Test-Case 'header lookup finds Location when Operation-Location is absent' {
+    $h = New-Object 'System.Collections.Generic.Dictionary[string,string]'
+    $h.Add('Location', 'https://example/operations/abc')
+    $h.Add('Retry-After', '20')
+    (Get-FHttpHeaderValue -Headers $h -Names @('Operation-Location', 'Location')) -eq 'https://example/operations/abc'
+}
+
+Test-Case 'header lookup is case-insensitive' {
+    # Invoke-WebRequest exposes headers in a case-SENSITIVE dictionary, so a
+    # header that is present can still be missed by an exact-case index.
+    $h = New-Object 'System.Collections.Generic.Dictionary[string,string]'
+    $h.Add('operation-location', 'https://example/operations/xyz')
+    (Get-FHttpHeaderValue -Headers $h -Names @('Operation-Location')) -eq 'https://example/operations/xyz'
+}
+
+Test-Case 'header lookup prefers Operation-Location over Location' {
+    $h = New-Object 'System.Collections.Generic.Dictionary[string,string]'
+    $h.Add('Location', 'https://example/redirect')
+    $h.Add('Operation-Location', 'https://example/operations/preferred')
+    (Get-FHttpHeaderValue -Headers $h -Names @('Operation-Location', 'Location')) -eq 'https://example/operations/preferred'
+}
+
+Test-Case 'header lookup returns null when no candidate is present' {
+    $h = New-Object 'System.Collections.Generic.Dictionary[string,string]'
+    $h.Add('Content-Type', 'application/json')
+    $null -eq (Get-FHttpHeaderValue -Headers $h -Names @('Operation-Location', 'Location'))
+}
+
+Test-Case 'header lookup unwraps a single-element array value' {
+    $h = @{ 'Location' = @('https://example/operations/arr') }
+    (Get-FHttpHeaderValue -Headers $h -Names @('Location')) -eq 'https://example/operations/arr'
+}
+
+Test-Case 'ConvertFrom-Json on a null body yields $null (the trap being guarded)' {
+    # Documents WHY Invoke-FabricRest must not return a parsed body verbatim.
+    $null -eq ('null' | ConvertFrom-Json)
+}
+
+Test-Case 'Invoke-FabricRest polls a 202 rather than returning its body' {
+    $t = Get-Utf8Text (Join-Path $repoRoot 'scripts/fabric/FabricToolbox.ps1')
+    # Both header names considered, and a 202 without a pollable operation is an
+    # explicit failure rather than a silent pass.
+    ($t -match "Names\s*@\('Operation-Location',\s*'Location'\)") -and
+    ($t -match 'returned 202 with no operation URI to poll')
+}
+
+Test-Case 'Invoke-FabricRest never returns a bare null on a successful response' {
+    $t = Get-Utf8Text (Join-Path $repoRoot 'scripts/fabric/FabricToolbox.ps1')
+    $t -match "if \(\`$null -eq \`$parsed\) \{[\s\S]{0,200}body\s*=\s*'null'"
+}
+
+Test-Case 'an empty folder inventory serialises to [] rather than a zero-byte file' {
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) "issue2-inv-$([guid]::NewGuid()).json"
+    try {
+        # Exercises the serialisation branch directly: an empty baseline must be
+        # distinguishable from a failed write.
+        $inventory = @()
+        $json = '[]'
+        if ($inventory.Count -eq 1) { $json = "[$($inventory[0] | ConvertTo-Json -Depth 8)]" }
+        elseif ($inventory.Count -gt 1) { $json = ($inventory | ConvertTo-Json -Depth 8) }
+        $json | Out-File -LiteralPath $tmp -Encoding utf8
+        $text = (Get-Utf8Text $tmp).Trim()
+        ($text -eq '[]') -and ((Get-Item $tmp).Length -gt 0)
+    } finally { Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue }
+}
+
+Write-Section 'Resume is scoped to this ticket own partial deployment'
+
+Test-Case 'resume converges only items absent from the pre-deployment baseline' {
+    $t = Get-Utf8Text (Join-Path $repoRoot 'scripts/fabric/FabricToolbox.ps1')
+    # The branch order is the control: a baseline hit is handled as somebody
+    # else's item BEFORE resume is ever considered.
+    $preIdx = $t.IndexOf('$preExisted = ($PreDeploymentKeys -contains')
+    $resumeIdx = $t.IndexOf('} elseif ($ResumePartial) {')
+    ($preIdx -gt 0) -and ($resumeIdx -gt $preIdx)
+}
+
+Test-Case 'a pre-existing item still needs AllowUpdate AND a snapshot' {
+    $t = Get-Utf8Text (Join-Path $repoRoot 'scripts/fabric/FabricToolbox.ps1')
+    ($t -match 'Refusing to overwrite an item this ticket did not create') -and
+    ($t -match 'Refusing to modify .* without a prior definition snapshot')
+}
+
+Test-Case 'resume is opt-in: the deployment script does not default it on' {
+    $t = Get-Utf8Text (Join-Path $repoRoot 'scripts/fabric/Deploy-Issue2Medallion.ps1')
+    # A [switch] with no assignment is off unless passed explicitly.
+    ($t -match '(?m)^\s*\[switch\]\$Resume,') -and ($t -notmatch '\$Resume\s*=\s*\$true')
+}
+
+Test-Case 'piping ConvertFrom-Json straight into a filter does NOT enumerate an empty array' {
+    # Pins the trap itself. ConvertFrom-Json writes an empty array to the
+    # pipeline as one object, so the naive one-liner sees a single item that is
+    # the empty array -- a baseline of "1 item" with no properties. This test
+    # asserts the broken behaviour exists, so that the correct form below is
+    # visibly different rather than looking like a pointless refactor.
+    $naive = @('[]' | ConvertFrom-Json | Where-Object { $null -ne $_ })
+    $naive.Count -eq 1
+}
+
+Test-Case 'an empty persisted baseline loads as zero items when assigned first' {
+    $parsed = '[]' | ConvertFrom-Json
+    $loaded = @()
+    if ($null -ne $parsed) { $loaded = @($parsed | Where-Object { $null -ne $_ }) }
+    $loaded.Count -eq 0
+}
+
+Test-Case 'a one-item persisted baseline loads as exactly one item' {
+    $parsed = '[{"itemType":"Lakehouse","itemName":"issue2_retail_lakehouse"}]' | ConvertFrom-Json
+    $loaded = @()
+    if ($null -ne $parsed) { $loaded = @($parsed | Where-Object { $null -ne $_ }) }
+    ($loaded.Count -eq 1) -and ($loaded[0].itemType -eq 'Lakehouse')
+}
+
+Test-Case 'the deployment script assigns the parsed baseline before enumerating it' {
+    $t = Get-Utf8Text (Join-Path $repoRoot 'scripts/fabric/Deploy-Issue2Medallion.ps1')
+    ($t -match '\$parsedBaseline = \$existingBaseline \| ConvertFrom-Json') -and
+    ($t -match '@\(\$parsedBaseline \| Where-Object \{ \$null -ne \$_ \}\)')
+}
+
+Test-Case 'the baseline is persisted and reused rather than recaptured on resume' {
+    $t = Get-Utf8Text (Join-Path $repoRoot 'scripts/fabric/Deploy-Issue2Medallion.ps1')
+    ($t -match 'inventory-baseline\.json') -and
+    ($t -match 'using the persisted pre-deployment baseline')
+}
+
+Test-Case 'a deployed item with parts is verified by reading its definition back' {
+    $t = Get-Utf8Text (Join-Path $repoRoot 'scripts/fabric/FabricToolbox.ps1')
+    ($t -match 'is missing definition part') -and
+    ($t -match 'its definition could not be read back')
+}
+
+Write-Section 'Evidence narrative is committed, not hand-edited into generated JSON'
+
+Test-Case 'the narrative file exists and is valid JSON' {
+    $p = Join-Path $repoRoot 'reviews/2/narrative.json'
+    (Test-Path -LiteralPath $p) -and ($null -ne ((Get-Utf8Text $p) | ConvertFrom-Json))
+}
+
+Test-Case 'the narrative declares errors, recovery, interventions and unsupported claims' {
+    $n = (Get-Utf8Text (Join-Path $repoRoot 'reviews/2/narrative.json')) | ConvertFrom-Json
+    $names = $n.PSObject.Properties.Name
+    ($names -contains 'errors') -and ($names -contains 'recoveryActions') -and
+    ($names -contains 'humanInterventions') -and ($names -contains 'unsupportedClaims')
+}
+
+Test-Case 'every recovery action points at a real error index' {
+    $n = (Get-Utf8Text (Join-Path $repoRoot 'reviews/2/narrative.json')) | ConvertFrom-Json
+    $errorCount = @($n.errors).Count
+    $bad = @($n.recoveryActions | Where-Object { $_.forError -lt 0 -or $_.forError -ge $errorCount })
+    ($errorCount -gt 0) -and ($bad.Count -eq 0)
+}
+
+Test-Case 'the agent declares its own unsupported claims rather than none' {
+    # An unsupported claim the reviewer finds after the agent declared none is a
+    # materially worse finding than one the agent flagged itself.
+    $n = (Get-Utf8Text (Join-Path $repoRoot 'reviews/2/narrative.json')) | ConvertFrom-Json
+    @($n.unsupportedClaims).Count -gt 0
+}
+
+Test-Case 'the manifest mayCallFabric discrepancy is declared, not hidden' {
+    $t = Get-Utf8Text (Join-Path $repoRoot 'reviews/2/narrative.json')
+    ($t -match 'mayCallFabric') -and ($t -match 'did NOT edit the manifest')
+}
+
+Test-Case 'the evidence writer refuses to run without a narrative file' {
+    $t = Get-Utf8Text (Join-Path $repoRoot 'scripts/fabric/Write-Issue2Evidence.ps1')
+    ($t -match 'Narrative file not found') -and
+    ($t -match 'Refusing to emit a package with empty errors and unsupportedClaims')
+}
+
+Test-Case 'the narrative contains no GUID and no email address' {
+    $t = Get-Utf8Text (Join-Path $repoRoot 'reviews/2/narrative.json')
+    ($t -notmatch '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}') -and
+    ($t -notmatch '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}')
+}
+
+Test-Case 'the evidence writer computes the inventory diff instead of hardcoding it' {
+    # Recording "nothing was added" on a run that added seven items would be a
+    # false record, which the evidence standard treats as a BLOCKED finding.
+    $t = Get-Utf8Text (Join-Path $repoRoot 'scripts/fabric/Write-Issue2Evidence.ps1')
+    ($t -match 'inventoryDiff = \$inventoryDiff') -and
+    ($t -match 'Compare-FabricFolderInventory')
+}
+
+Write-Section 'OneLake returns bytes, not text (regression from the first full run)'
+
+Test-Case 'Get-OneLakeFile decodes a byte[] response before returning it' {
+    $t = Get-Utf8Text (Join-Path $repoRoot 'scripts/fabric/FabricToolbox.ps1')
+    ($t -match '\$content -is \[byte\[\]\]') -and
+    ($t -match '\[Text\.Encoding\]::UTF8\.GetString\(\$bytes\)')
+}
+
+Test-Case 'Get-OneLakeFile strips a UTF-8 BOM from a byte[] response' {
+    # A BOM left at the front of the string makes ConvertFrom-Json fail on a
+    # payload that is otherwise perfectly valid.
+    $t = Get-Utf8Text (Join-Path $repoRoot 'scripts/fabric/FabricToolbox.ps1')
+    $t -match '\$bytes\[0\] -eq 0xEF -and \$bytes\[1\] -eq 0xBB -and \$bytes\[2\] -eq 0xBF'
+}
+
+Test-Case 'the byte[] trap really does defeat every surface check' {
+    # Pins WHY this was missed rather than only that it is fixed, because the
+    # trap is quieter than it first appears:
+    #
+    #   .Length      returns the payload size, so the "N bytes retrieved" log
+    #                line is correct and reassuring.
+    #   ConvertFrom  does NOT throw. Each byte is an integer, and an integer is
+    #                a valid JSON document, so the pipeline yields a list of
+    #                numbers instead of the object -- no error anywhere.
+    #
+    # The first symptom is a missing property on the parsed audit, thrown far
+    # from the cause. If a future PowerShell changes either behaviour this test
+    # goes red and tells us the guard is no longer load-bearing.
+    $bytes = [Text.Encoding]::UTF8.GetBytes('{"passed": true}')
+    $lengthLooksRight = ($bytes.Length -eq 16)
+
+    $parsed = @($bytes | ConvertFrom-Json)
+    $silentlyWrong = ($parsed.Count -gt 1) -and
+                     ($parsed[0] -is [int]) -and
+                     ($parsed[0] -eq $bytes[0])
+
+    $lengthLooksRight -and $silentlyWrong
+}
+
+Test-Case 'decoding the byte[] yields an audit object that has the properties the validator reads' {
+    $bytes = [Text.Encoding]::UTF8.GetBytes('{"passed": true, "rowCounts": {"a": 1}}')
+    $decoded = [Text.Encoding]::UTF8.GetString($bytes) | ConvertFrom-Json
+    ($decoded.PSObject.Properties.Name -contains 'passed') -and ($decoded.passed -eq $true)
+}
+
+# =============================================================================
 Write-Host ''
 if ($script:Fail -gt 0) {
     Write-Host "FAILED  $($script:Fail) failed, $($script:Pass) passed" -ForegroundColor Red

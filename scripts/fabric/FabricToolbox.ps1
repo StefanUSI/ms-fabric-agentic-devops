@@ -210,14 +210,52 @@ function Get-FabricAccessToken {
     return ($token | Select-Object -First 1).Trim()
 }
 
+function Get-FHttpHeaderValue {
+    <#
+        Case-insensitive header lookup across several candidate names.
+
+        Invoke-WebRequest -UseBasicParsing exposes headers as a generic
+        Dictionary whose default comparer is CASE-SENSITIVE, and whose values may
+        arrive as a single string or a one-element array. Indexing it directly
+        with a guessed casing returns $null for a header that is present, which
+        is how a long-running operation silently stops being polled.
+    #>
+    param($Headers, [Parameter(Mandatory)][string[]]$Names)
+
+    if ($null -eq $Headers) { return $null }
+    foreach ($name in $Names) {
+        foreach ($key in $Headers.Keys) {
+            if ($key -ine $name) { continue }
+            $value = $Headers[$key]
+            if ($value -is [array]) { $value = @($value)[0] }
+            if (-not [string]::IsNullOrWhiteSpace($value)) { return [string]$value }
+        }
+    }
+    return $null
+}
+
 function Invoke-FabricRest {
     <#
         One request against the Fabric REST API, with long-running-operation
         polling.
 
-        A 202 is NOT success. When Fabric returns 202 with an Operation-Location,
-        this function polls that operation to a terminal state and returns the
-        result, so no caller can mistake acceptance for completion.
+        A 202 is NOT success. When Fabric returns 202, this function polls the
+        operation to a terminal state and returns the result, so no caller can
+        mistake acceptance for completion.
+
+        The operation URI is read from EITHER Operation-Location OR Location,
+        case-insensitively. Fabric returns `Location` for item create and
+        getDefinition; an earlier version of this function looked only for
+        `Operation-Location`, found nothing, fell through, and returned the
+        response body -- which for those calls is the literal JSON `null`.
+        ConvertFrom-Json turns that into $null, which callers could not tell
+        apart from the error return. The result was an item that WAS created
+        asynchronously being reported as a failure, with no message. A 202 whose
+        operation URI cannot be found is now a loud error, never a pass.
+
+        This function never returns a bare $null on a successful response.
+        Success with an empty or `null` body returns a small object, so $null
+        means one thing only: the request failed.
     #>
     param(
         [Parameter(Mandatory)][ValidateSet('GET', 'POST', 'PATCH', 'PUT', 'DELETE')][string]$Method,
@@ -250,13 +288,32 @@ function Invoke-FabricRest {
         return $null
     }
 
-    if ($response.StatusCode -eq 202 -and $response.Headers['Operation-Location']) {
-        return (Wait-FabricOperation -OperationUri $response.Headers['Operation-Location'] `
-            -TimeoutSeconds $TimeoutSeconds)
+    if ($response.StatusCode -eq 202) {
+        $operationUri = Get-FHttpHeaderValue -Headers $response.Headers `
+            -Names @('Operation-Location', 'Location')
+        if ([string]::IsNullOrWhiteSpace($operationUri)) {
+            Write-FErr "Fabric API $Method $Path returned 202 with no operation URI to poll."
+            Write-FErr 'Acceptance without a pollable operation cannot be verified. Treating as FAILED.'
+            return $null
+        }
+        return (Wait-FabricOperation -OperationUri $operationUri -TimeoutSeconds $TimeoutSeconds)
     }
 
-    if ([string]::IsNullOrWhiteSpace($response.Content)) { return @{ statusCode = $response.StatusCode } }
-    try { return ($response.Content | ConvertFrom-Json) } catch { return @{ raw = $response.Content } }
+    if ([string]::IsNullOrWhiteSpace($response.Content)) {
+        return [pscustomobject]@{ statusCode = [int]$response.StatusCode; body = 'empty' }
+    }
+    try {
+        $parsed = ($response.Content | ConvertFrom-Json)
+    } catch {
+        return [pscustomobject]@{ statusCode = [int]$response.StatusCode; raw = $response.Content }
+    }
+    # ConvertFrom-Json returns $null for the literal body `null`. Returning that
+    # verbatim would make a successful response indistinguishable from a failed
+    # one at every call site.
+    if ($null -eq $parsed) {
+        return [pscustomobject]@{ statusCode = [int]$response.StatusCode; body = 'null' }
+    }
+    return $parsed
 }
 
 function Wait-FabricOperation {
@@ -287,7 +344,19 @@ function Wait-FabricOperation {
             return $null
         }
 
-        switch ($poll.status) {
+        # Under Set-StrictMode, reading a property the response does not carry is
+        # a terminating error. An operation payload without a status is a
+        # protocol surprise worth reporting, not worth crashing on.
+        $status = $null
+        if ($null -ne $poll -and $poll.PSObject.Properties.Name -contains 'status') {
+            $status = $poll.status
+        }
+        if ($null -eq $status) {
+            Write-FErr 'Operation poll returned no status field. Cannot confirm completion.'
+            return $null
+        }
+
+        switch ($status) {
             'Succeeded' {
                 # The operation result lives at a separate URI for most item
                 # operations. Absence of a result body is normal, not an error.
@@ -379,7 +448,20 @@ function Get-FabricFolderInventory {
         if ($dir -and -not (Test-Path -LiteralPath $dir)) {
             New-Item -ItemType Directory -Force -Path $dir | Out-Null
         }
-        ($inventory | ConvertTo-Json -Depth 8) | Out-File -LiteralPath $OutputPath -Encoding utf8
+        # An empty inventory must serialise to "[]", not to nothing. ConvertTo-Json
+        # of an empty array writes a zero-byte file, and a zero-byte file cannot
+        # be told apart from a write that failed -- which is exactly the
+        # ambiguity a baseline must not have.
+        # Windows PowerShell 5.1 has no -AsArray, and it unwraps a single-element
+        # array into a bare JSON object. Both shapes are forced to a real array
+        # here so the file is always a list, whatever it holds.
+        $json = '[]'
+        if ($inventory.Count -eq 1) {
+            $json = "[$($inventory[0] | ConvertTo-Json -Depth 8)]"
+        } elseif ($inventory.Count -gt 1) {
+            $json = ($inventory | ConvertTo-Json -Depth 8)
+        }
+        $json | Out-File -LiteralPath $OutputPath -Encoding utf8
     }
 
     # Comma operator: an inventory of exactly one item would otherwise unroll to
@@ -622,6 +704,25 @@ function Publish-FabricItemDefinition {
 
         The read-back is not ceremony. A create call that returns 201 has been
         accepted; re-reading the item by id is what establishes that it exists.
+
+        RESUMING AN INTERRUPTED DEPLOYMENT
+        -PreDeploymentKeys carries the set of "type/name" keys that existed in
+        the target folder BEFORE this ticket wrote anything, and -ResumePartial
+        opts in to converging items that this ticket's own earlier run created.
+
+        The distinction is the whole point, and it is decided by data rather than
+        by intent: an item whose key IS in the pre-deployment baseline belongs to
+        somebody else and is refused exactly as before, needing -AllowUpdate and
+        a snapshot. An item whose key is NOT in that baseline did not exist until
+        this ticket created it, so completing its definition finishes an
+        interrupted create rather than overwriting anyone's work.
+
+        Without this, a deployment that failed halfway could never be resumed:
+        the create-only guard would refuse the items the ticket itself had just
+        made, and the only route forward would be deletion -- which is a human
+        action and is never automatic. It also makes the function behave as
+        docs/agent-toolbox.md 6 already documents it, namely idempotent on
+        republication.
     #>
     param(
         [Parameter(Mandatory)][string]$WorkspaceId,
@@ -633,6 +734,8 @@ function Publish-FabricItemDefinition {
         [Parameter(Mandatory)][string]$RequiredPrefix,
         [switch]$AllowUpdate,
         $Snapshot = $null,
+        [string[]]$PreDeploymentKeys = @(),
+        [switch]$ResumePartial,
         [switch]$WhatIf
     )
 
@@ -661,14 +764,30 @@ function Publish-FabricItemDefinition {
     $existing = Get-FabricItemByName -WorkspaceId $WorkspaceId -DisplayName $DisplayName -ItemType $ItemType
     if ($existing -eq 'AMBIGUOUS' -or $existing -eq 'ERROR') { return $null }
 
+    $resumed = $false
     if ($null -ne $existing) {
-        if (-not $AllowUpdate) {
+        $preExisted = ($PreDeploymentKeys -contains "$ItemType/$DisplayName")
+
+        if ($preExisted) {
+            # Present before this ticket touched anything: somebody else's item.
+            if (-not $AllowUpdate) {
+                Write-FErr "'$DisplayName' ($ItemType) already exists and createOnly is set."
+                Write-FErr 'Refusing to overwrite an item this ticket did not create.'
+                return $null
+            }
+            if ($null -eq $Snapshot) {
+                Write-FErr "Refusing to modify '$DisplayName' without a prior definition snapshot."
+                return $null
+            }
+        } elseif ($ResumePartial) {
+            $resumed = $true
+            Write-FWarn "'$DisplayName' exists but was absent from the pre-deployment baseline."
+            Write-FWarn 'Completing this ticket''s own interrupted create rather than overwriting.'
+        } else {
             Write-FErr "'$DisplayName' ($ItemType) already exists and createOnly is set."
-            Write-FErr 'Refusing to overwrite an item this ticket did not create.'
-            return $null
-        }
-        if ($null -eq $Snapshot) {
-            Write-FErr "Refusing to modify '$DisplayName' without a prior definition snapshot."
+            Write-FErr 'It is absent from the pre-deployment baseline, so a previous run of this'
+            Write-FErr 'ticket created it. Re-run with -Resume to converge it, or have a human'
+            Write-FErr 'delete it. This command never deletes.'
             return $null
         }
     }
@@ -680,13 +799,37 @@ function Publish-FabricItemDefinition {
 
         $created = Invoke-FabricRest -Method POST -Path "workspaces/$WorkspaceId/items" -Body $body
         if ($null -eq $created) { return $null }
-        $itemId = $created.id
+
+        $itemId = $null
+        if ($created.PSObject.Properties.Name -contains 'id') { $itemId = $created.id }
+
+        if ([string]::IsNullOrWhiteSpace($itemId)) {
+            # A create that completed through a long-running operation does not
+            # always carry the item in its result payload. Re-resolving by exact
+            # display name AND type inside the supplied workspace is a read-back,
+            # not an inference: it matches exactly, and Get-FabricItemByName is a
+            # hard stop on ambiguity rather than a chooser.
+            Write-FInfo "Create returned no item id for '$DisplayName'; resolving by name and type."
+            $resolved = Get-FabricItemByName -WorkspaceId $WorkspaceId -DisplayName $DisplayName -ItemType $ItemType
+            if ($resolved -eq 'AMBIGUOUS' -or $resolved -eq 'ERROR' -or $null -eq $resolved) {
+                Write-FErr "'$DisplayName' was accepted but could not be resolved afterwards."
+                return $null
+            }
+            $itemId = $resolved.id
+        }
     } else {
         $itemId = $existing.id
-        $body = @{ definition = @{ parts = $Parts } }
-        $updated = Invoke-FabricRest -Method POST `
-            -Path "workspaces/$WorkspaceId/items/$itemId/updateDefinition?updateMetadata=True" -Body $body
-        if ($null -eq $updated) { return $null }
+        if ($Parts.Count -gt 0) {
+            $body = @{ definition = @{ parts = $Parts } }
+            $updated = Invoke-FabricRest -Method POST `
+                -Path "workspaces/$WorkspaceId/items/$itemId/updateDefinition?updateMetadata=True" -Body $body
+            if ($null -eq $updated) { return $null }
+        } else {
+            # A Lakehouse carries no deployable definition parts. There is
+            # nothing to converge, and posting an empty definition would be a
+            # write with no content rather than a no-op.
+            Write-FInfo "'$DisplayName' has no definition parts; nothing to converge."
+        }
     }
 
     # --- Read-back. Acceptance is not verification. ---
@@ -708,13 +851,41 @@ function Publish-FabricItemDefinition {
         return $null
     }
 
-    Write-FOk "$ItemType '$DisplayName' verified by read-back (id $itemId)"
+    # For an item that carries definition parts, existence is not enough: the
+    # parts are the thing that was deployed. Reading the definition back is what
+    # separates "an item with this name exists" from "the code in this repository
+    # is what is now in Fabric".
+    $definitionPartCount = $null
+    if ($Parts.Count -gt 0) {
+        $definition = Invoke-FabricRest -Method POST -Path "workspaces/$WorkspaceId/items/$itemId/getDefinition"
+        if ($null -eq $definition) {
+            Write-FErr "'$DisplayName' exists but its definition could not be read back. Treating as FAILED."
+            return $null
+        }
+        $returnedPaths = @()
+        if ($definition.PSObject.Properties.Name -contains 'definition' -and
+            $definition.definition.PSObject.Properties.Name -contains 'parts') {
+            $returnedPaths = @($definition.definition.parts | ForEach-Object { $_.path })
+        }
+        $definitionPartCount = $returnedPaths.Count
+        foreach ($expectedPath in @($Parts | ForEach-Object { $_.path })) {
+            if ($returnedPaths -notcontains $expectedPath) {
+                Write-FErr "'$DisplayName' is missing definition part '$expectedPath' after deployment."
+                return $null
+            }
+        }
+    }
+
+    $verb = if ($resumed) { 'converged' } else { 'verified' }
+    Write-FOk "$ItemType '$DisplayName' $verb by read-back (id $itemId, $definitionPartCount part(s))"
     return [pscustomobject]@{
-        itemName = $DisplayName
-        itemType = $ItemType
-        itemId   = $itemId
-        created  = ($null -eq $existing)
-        whatIf   = $false
+        itemName            = $DisplayName
+        itemType            = $ItemType
+        itemId              = $itemId
+        created             = ($null -eq $existing)
+        resumed             = $resumed
+        definitionPartCount = $definitionPartCount
+        whatIf              = $false
     }
 }
 
@@ -864,7 +1035,23 @@ function Get-OneLakeFile {
         Write-FErr "OneLake read failed for '$RelativePath': $($_.Exception.Message)"
         return $null
     }
-    return $response.Content
+    # OneLake answers with application/octet-stream, and Windows PowerShell hands
+    # back .Content as a byte[] for a non-text content type. A byte[] survives
+    # everything that looks like a success: .Length reports the payload size, so
+    # the log line is right; Out-File writes one decimal per line; and piping it
+    # to ConvertFrom-Json feeds bytes in one at a time. The failure only surfaces
+    # much later, as a missing property on the parsed audit. Decode here so the
+    # function's contract is "returns the file's text" rather than "returns
+    # whatever Invoke-WebRequest chose this time".
+    $content = $response.Content
+    if ($content -is [byte[]]) {
+        $bytes = $content
+        if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+            $bytes = $bytes[3..($bytes.Length - 1)]
+        }
+        $content = [Text.Encoding]::UTF8.GetString($bytes)
+    }
+    return $content
 }
 
 function Test-Issue2AuditFile {

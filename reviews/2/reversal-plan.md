@@ -1,6 +1,6 @@
 ﻿# Reversal plan - GitHub Issue #2
 
-Generated 2026-08-26T08:56:07Z BEFORE any write.
+Generated 2026-08-28T09:26:15Z BEFORE any write.
 
 **No step below is executed by an agent.** Cleanup is a human action
 (CLAUDE.md rule 5 and the compensating controls in

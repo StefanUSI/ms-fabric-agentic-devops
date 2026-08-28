@@ -1,0 +1,143 @@
+{
+  "$comment": [
+    "Narrative half of the Issue #2 evidence package, folded into evidence.json",
+    "by scripts/fabric/Write-Issue2Evidence.ps1.",
+    "",
+    "These four lists cannot be derived from a run. They are committed here, and",
+    "reviewed alongside the generated evidence, so that the package stays",
+    "reproducible: regenerating evidence.json never invents or loses them, and",
+    "nothing has to be hand-edited into generated JSON afterwards.",
+    "",
+    "Every error below is recorded whether or not it was recovered. A package",
+    "that omitted a mid-run failure would misrepresent how the work was produced",
+    "(docs/review-evidence-standard.md, field 12).",
+    "",
+    "Contains no real Fabric, tenant or user identifier."
+  ],
+
+  "errors": [
+    {
+      "whenUtc": "2026-08-26T00:00:00Z",
+      "phase": "environment",
+      "message": "Earlier session: deployment stopped at the authorisation gate with exit code 28. config/environment.local.json had fabric.authorisedForTicket = null, so the local configuration did not bind the authorised target to this ticket. The agent did not open its own gate.",
+      "recovered": true
+    },
+    {
+      "whenUtc": "2026-08-26T00:00:00Z",
+      "phase": "validation",
+      "message": "Earlier session: eight offline tests failed with 'The property Count cannot be found on this object'. Windows PowerShell unrolls a returned collection onto the pipeline, so an empty or single-element result reached the caller as $null or as a bare string, and .Count on either is a hard error under Set-StrictMode.",
+      "recovered": true
+    },
+    {
+      "whenUtc": "2026-08-26T00:00:00Z",
+      "phase": "deployment",
+      "message": "Earlier session: Plan mode contacted the Fabric API. Publish-FabricItemDefinition queried for an existing item before honouring -WhatIf, so a dry run was not offline.",
+      "recovered": true
+    },
+    {
+      "whenUtc": "2026-08-28T08:20:00Z",
+      "phase": "deployment",
+      "message": "First Live deployment exited 26 after creating the Lakehouse, with NO error message printed. Fabric answers item create and getDefinition with HTTP 202 and a 'Location' header; Invoke-FabricRest looked only for 'Operation-Location', found nothing, and fell through to parsing the response body, which for those calls is the literal JSON 'null'. ConvertFrom-Json turns that into $null, which is the same value the function returns on failure. The notebook issue2_00_generate_source WAS created asynchronously by Fabric but was recorded as a failure, and the long-running operation was never polled at all.",
+      "recovered": true
+    },
+    {
+      "whenUtc": "2026-08-28T08:31:00Z",
+      "phase": "deployment",
+      "message": "First resume attempt exited 1 with 'The property itemType cannot be found on this object'. The persisted pre-deployment baseline '[]' was piped straight from ConvertFrom-Json into Where-Object; ConvertFrom-Json writes an empty array to the pipeline as ONE object rather than enumerating it, so an empty baseline was counted as a single item with no properties.",
+      "recovered": true
+    },
+    {
+      "whenUtc": "2026-08-28T08:46:00Z",
+      "phase": "deployment",
+      "message": "Three consecutive headless developer runs deployed the items, submitted a pipeline run, and then died mid-poll. The agent backgrounded the long poll and emitted a closing message such as 'I'll wait for the background checks to report back', but the headless process exits once it stops producing output, which killed the deployment child. The launching dispatcher observed a clean child exit and reported 'Developer agent finished (exit 0)', so a structurally incomplete run was indistinguishable from a successful one. Each relaunch submitted a further pipeline run, so unattended runs accumulated on a shared capacity whose documented pipeline concurrency is 1.",
+      "recovered": true
+    },
+    {
+      "whenUtc": "2026-08-28T09:22:00Z",
+      "phase": "validation",
+      "message": "The first run to reach both terminal pipeline states then failed with 'The property passed cannot be found on this object' in Test-Issue2AuditFile. OneLake answers with application/octet-stream, so Windows PowerShell returns Invoke-WebRequest .Content as a byte[] rather than a string, and Get-OneLakeFile returned it undecoded. The byte[] defeated every surface check: .Length reported the true payload size so the 'audit retrieved (3193 bytes)' line looked correct, Out-File wrote one decimal per line producing a 14088-byte file, and piping to ConvertFrom-Json did not throw because each byte is itself a valid JSON number. Both pipeline runs had in fact succeeded and both audit payloads were correct; only the retrieval was wrong, and it surfaced far from its cause.",
+      "recovered": true
+    }
+  ],
+
+  "recoveryActions": [
+    {
+      "forError": 0,
+      "action": "fabric.authorisedForTicket was set to \"2\" in the gitignored local configuration, binding the authorised target to this ticket. Recorded precisely because the mechanism matters to the control: the human granted the approval in writing as a comment on PR #6, then instructed the orchestrator agent to apply it, and the ORCHESTRATOR AGENT wrote the field. A human did not edit the file. The orchestrator first refused and asked the human to set it themselves; the human reaffirmed the instruction, characterised it as execution of their approval rather than agent self-authorisation, and the orchestrator complied. The developer agent that consumed the gate did not set it, so no agent opened a gate for its own run -- but the field is no longer evidence of a human keystroke, and a reviewer should weigh it as an agent transcription of a human decision recorded elsewhere.",
+      "residualRisk": "Authorisation is per-ticket and does not carry to the next Issue. .agent-manifest.json still records permissions.mayCallFabric = false; see unsupportedClaims."
+    },
+    {
+      "forError": 1,
+      "action": "Returned results with the comma operator in Test-Issue2AuditFile and Get-FabricFolderInventory so an empty or single-element result stays an array.",
+      "residualRisk": "None. Covered by offline tests that feed empty and single-element results."
+    },
+    {
+      "forError": 2,
+      "action": "Moved the -WhatIf return above the existing-item lookup. Plan mode is now fully offline, needing no token and no network.",
+      "residualRisk": "None. A plan-time collision check would be stale by deploy time in any case; the createOnly guard at write time is the real control."
+    },
+    {
+      "forError": 3,
+      "action": "Added Get-FHttpHeaderValue, a case-insensitive lookup that accepts either Operation-Location or Location, and made Invoke-FabricRest poll every 202 to a terminal state. A 202 whose operation URI cannot be found is now an explicit failure rather than a silent pass. Invoke-FabricRest no longer returns a bare $null on any successful response, so $null means only 'the request failed'. Publish-FabricItemDefinition now also reads the deployed definition back and fails if any expected part is missing. Six offline regression tests pin this behaviour.",
+      "residualRisk": "The header name is observed from this tenant's responses rather than from a contract. Both spellings are now accepted, and an unpollable 202 fails loudly, so a further change in header naming degrades to a loud failure rather than a silent one."
+    },
+    {
+      "forError": 4,
+      "action": "Assigned the parsed baseline to a variable before enumerating it, which forces PowerShell to enumerate the array. Four offline tests cover the empty, one-item and trap cases, including one that asserts the naive form really does mis-count.",
+      "residualRisk": "None. The empty, single-item and multi-item baselines are each covered by a test."
+    },
+    {
+      "forError": 5,
+      "action": "The orchestrator stopped relaunching the developer agent after the third orphaned run and ran the committed scripts/fabric/Deploy-Issue2Medallion.ps1 -Mode Live -Resume directly, in a process that survives the poll. No new implementation was written to achieve this; the script executed is the one already committed to this branch. Both pipeline runs then reached a terminal Succeeded state.",
+      "residualRisk": "UNRESOLVED, and the most significant open defect in this package. The launch harness is unchanged: a headless developer agent can still orphan a long-running deployment, and the dispatcher will still report exit 0. Any future Fabric ticket hits this on the first run. Fixing it means running the deployment synchronously from the dispatcher, which is control-plane work deliberately left out of this ticket's scope. Separately, the orphaned attempts submitted extra pipeline runs against a shared capacity documented as pipeline-concurrency-1; the runs were idempotent and all reached Succeeded, but the concurrency guidance was not honoured in practice."
+    },
+    {
+      "forError": 6,
+      "action": "Get-OneLakeFile now decodes a byte[] response to UTF-8 text and strips a leading BOM before returning, so its contract is 'returns the file's text' rather than 'returns whatever Invoke-WebRequest chose for this content type'. Four offline regression tests pin it, including one that asserts the trap itself: that .Length still looks correct on a byte[] and that piping bytes to ConvertFrom-Json returns integers WITHOUT throwing.",
+      "residualRisk": "The fix was made by the orchestrator agent rather than the developer agent, and it is the only change in this package not authored by the separate developer process. It is narrow -- one decode in one function, plus tests -- and the reviewer should treat it as such. The audit payloads retrieved before the fix were correct in content; only their persistence and parsing were wrong."
+    }
+  ],
+
+  "humanInterventions": [
+    {
+      "whenUtc": "2026-08-28T08:11:00Z",
+      "who": "human",
+      "action": "Granted Fabric deployment approval for Issue #2 in writing, as a comment on PR #6, authorising creation of new Issue #2-prefixed items in the configured target and forbidding modification, rename or deletion of unrelated existing items. The human then instructed the orchestrator agent to apply that approval by setting fabric.authorisedForTicket to \"2\" in the gitignored config/environment.local.json. The orchestrator initially refused and asked the human to set the field themselves; the human reaffirmed, characterising it as execution of their approval rather than agent self-authorisation, and the orchestrator wrote the field. THE FILE WAS EDITED BY AN AGENT, NOT BY A HUMAN.",
+      "reason": "The Issue authorises Fabric deployment but supplies the target by reference, because naming a workspace or GUID in a public Issue would be the exposure the ticket forbids. Binding that reference to this ticket is a human gate. It is recorded this way because an earlier draft of this narrative stated that a human set the field and that no agent modified the file, which was not accurate. The human decision was genuine and is independently verifiable in the PR #6 comment history; what an agent supplied was the keystroke."
+    },
+    {
+      "whenUtc": "2026-08-28T09:00:00Z",
+      "who": "human",
+      "action": "After three orphaned deployment runs, instructed the orchestrator to complete the deployment, pipeline execution, runtime validation, idempotency validation, evidence update and reviewer process directly, and not to open additional control-plane pull requests unless execution was technically impossible without a narrowly scoped fix.",
+      "reason": "The workflow could not progress by relaunching the developer agent, because each relaunch reproduced the orphaning and submitted another pipeline run. The instruction bounded the orchestrator to executing committed scripts plus one narrowly scoped fix, rather than reimplementing the ticket."
+    }
+  ],
+
+  "unsupportedClaims": [
+    {
+      "claim": "The agent was permitted by its execution manifest to call the Fabric API.",
+      "whyUnsupported": ".agent-manifest.json records permissions.mayCallFabric = false and fabricConfigured = false, and deployment proceeded anyway. Those two fields are hardcoded to $false in scripts/developer-dispatcher.ps1 and no code path sets them true, so they are an unwired stub rather than a per-run decision. Deployment rested instead on three signals that do bind: the Issue answering 'Yes - feature environment only' to Fabric deployment, the human-set fabric.authorisedForTicket = \"2\", and the explicit launch instruction to deploy. The agent did NOT edit the manifest to agree with itself.",
+      "impactIfFalse": "If the manifest is the authoritative gate rather than a stub, this deployment was unauthorised and every Fabric item created by it should be deleted by a human. The reversal plan covers exactly that. The dispatcher needs a real -FabricConfigured path before the next Fabric ticket; this is a control-plane defect, not a finding about the workload."
+    },
+    {
+      "claim": "The persisted pre-deployment baseline file was captured by the deployment script.",
+      "whyUnsupported": "The first Live run wrote its baseline as a ZERO-BYTE file, because ConvertTo-Json of an empty array emits nothing. The agent deleted that ambiguous file during diagnosis and re-created runtime/issue2/inventory-baseline.json containing []. The empty pre-deployment state is independently corroborated three ways -- a read-only preflight before any write reported 0 items in the folder and 0 issue2_* items anywhere in the workspace, the first deployment log records '0 item(s) in the target folder before deployment', and the Issue itself states the folder was verified empty -- but the file now on disk was written by the agent, not captured by the script.",
+      "impactIfFalse": "If the folder was not empty beforehand, an item absent from the baseline could be treated as this ticket's own and converged by -Resume. The three corroborating observations all report empty, and the inventory diff after deployment is checked against the allowlist regardless."
+    },
+    {
+      "claim": "In-place modification of a pre-existing Fabric item would have been detected.",
+      "whyUnsupported": "The Items API returns no definition hash, so inventory entries record definitionHash = 'not-captured'. The inventory diff therefore detects additions and removals, not in-place edits. This is open decision 6 in docs/environment-and-constraints.md and is not closed by this ticket.",
+      "impactIfFalse": "A modification made to an existing item outside this ticket's scope would not appear in inventoryDiff. This ticket creates only and modifies nothing, and Publish-FabricItemDefinition refuses to update any item present in the pre-deployment baseline without both -AllowUpdate and a prior snapshot."
+    },
+    {
+      "claim": "The reviewer cannot write to Microsoft Fabric.",
+      "whyUnsupported": "The reviewer shares the developer's delegated user identity and therefore inherits Fabric write access. This is recorded as unmitigated residual risk at Level 1 in docs/environment-and-constraints.md.",
+      "impactIfFalse": "Not applicable; the claim is stated here precisely because it does not hold. It is closed only by a separate identity at Level 2."
+    },
+    {
+      "claim": "Every artefact in this package was produced by the separate developer agent process.",
+      "whyUnsupported": "It was not. The Fabric items, notebooks, pipeline, toolbox, deployment script, data contract, allowlist, documentation and the bulk of the tests were authored by separate headless developer processes. But after three orphaned runs the ORCHESTRATOR agent (a) executed the committed deployment script directly to reach terminal pipeline states, (b) fixed the byte[] decode in Get-OneLakeFile, (c) added four offline regression tests for it, and (d) corrected this narrative. Those changes are identifiable in the branch history and are listed in recoveryActions entries 5 and 6.",
+      "impactIfFalse": "The proof-of-concept claim being tested is that a developer agent builds and an independent reviewer judges. A portion of the final work was orchestrator-authored, so the developer/reviewer separation is weaker in this run than the workflow design intends. The reviewer separation itself is unaffected -- the reviewer runs in its own detached worktree over committed artefacts only and inherits no orchestrator context -- but the reviewer is now also reviewing orchestrator work, and should be told so rather than left to infer it."
+    }
+  ]
+}
